@@ -38,6 +38,7 @@ export const EmojiCatalog = lazy(async () => {
           height="100%"
           categoryIcons={categoryIcons}
           autoFocusSearch={autoFocus}
+          skinTonesDisabled
           searchPlaceholder="Search emoji"
           previewConfig={{ showPreview: false }}
           categories={[

@@ -462,7 +462,10 @@ function AvatarMenu({
     setBusy(true);
     void Promise.resolve(next)
       .then(onPick)
-      .then(() => done && toast(done))
+      .then(() => {
+        if (done) toast(done);
+        onClose();
+      })
       .catch((cause) => toast(errorMessage(cause)))
       .finally(() => setBusy(false));
   };
@@ -530,6 +533,11 @@ function AvatarField({
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLSpanElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const close = () => {
+    setOpen(false);
+    trigger.current?.focus();
+  };
   useEffect(() => {
     if (!open) return;
     const outside = (event: PointerEvent) => {
@@ -539,7 +547,7 @@ function AvatarField({
       if (event.key !== 'Escape') return;
       event.preventDefault();
       event.stopPropagation();
-      setOpen(false);
+      close();
     };
     document.addEventListener('pointerdown', outside, true);
     window.addEventListener('keydown', key, true);
@@ -551,6 +559,7 @@ function AvatarField({
   return (
     <span className="avatar-wrap" ref={root}>
       <button
+        ref={trigger}
         type="button"
         className="avatar-button"
         aria-expanded={open}
@@ -559,7 +568,7 @@ function AvatarField({
       >
         <BotAvatar name={name} avatar={avatar} size="lg" />
       </button>
-      {open && <AvatarMenu onPick={onPick} onClose={() => setOpen(false)} />}
+      {open && <AvatarMenu onPick={onPick} onClose={close} />}
     </span>
   );
 }

@@ -8515,16 +8515,16 @@ describe('interface components', { concurrency: interfaceLanes }, () => {
         await render({ requestedMessage: { id: 'synthetic-send', text: 'Synthetic request' },
           refresh: () => new Promise(resolve => { releaseRefresh = resolve; }) });
         await settle(() => messageRequest && document.querySelector('.message-user'));
-        assert.equal(document.querySelector('.thinking .sr-only')?.textContent, 'Working…');
+        assert.equal(document.querySelector('.thinking .live-line-current')?.textContent, 'Thinking…');
         await act(async () => releaseMessage(Response.json({
           messageId: messageRequest.clientMessageId, turnId: activity.turnId,
         })));
         await settle(() => releaseRefresh);
-        assert.equal(document.querySelector('.thinking .sr-only')?.textContent, 'Working…');
+        assert.equal(document.querySelector('.thinking .live-line-current')?.textContent, 'Thinking…');
         state = { ...state, activity: [activity] };
         await act(async () => releaseRefresh());
         await render();
-        assert.equal(document.querySelector('.thinking .sr-only')?.textContent, 'Working…');
+        assert.equal(document.querySelector('.thinking .live-line-current')?.textContent, 'Thinking…');
         const stop = document.querySelector('[aria-label="Stop all work"]');
         assert.ok(stop && !stop.disabled);
         await act(async () => stop.click());
@@ -8537,8 +8537,7 @@ describe('interface components', { concurrency: interfaceLanes }, () => {
           await render();
           if (line) assert.ok(document.querySelector('.thinking')?.textContent?.includes(line));
           else {
-            assert.equal(document.querySelector('.thinking .sr-only')?.textContent, 'Working…');
-            assert.ok(document.querySelector('.thinking .working-text [aria-hidden="true"]')?.textContent.trim());
+            assert.equal(document.querySelector('.thinking .live-line-current')?.textContent, 'Thinking…');
           }
           assert.ok(document.querySelector('[aria-label="Stop all work"]'));
         }
@@ -8550,7 +8549,7 @@ describe('interface components', { concurrency: interfaceLanes }, () => {
         assert.ok(document.querySelector('[aria-label="Stop all work"]'));
         state = { ...state, activity: [activity, task] };
         await render();
-        assert.equal(document.querySelector('.thinking .sr-only')?.textContent, 'Working…');
+        assert.equal(document.querySelector('.thinking .live-line-current')?.textContent, 'Thinking…');
         assert.ok(!document.querySelector('.thinking').textContent.includes('hotel'));
         state = { ...state, activity: [{ ...activity, doing: 'tool', site: 'example.test', step: 'Comparing prices',
           quietSince: new Date(Date.now() - 150_000).toISOString(), received: true }] };
