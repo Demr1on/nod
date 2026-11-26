@@ -88,12 +88,11 @@
 .card-items[data-gutter='choice'][data-closed] > li,
 .card-compare[data-closed] .card-contender {
   border-style: dashed;
+  border-color: var(--gray-50);
   background: transparent;
 }
 :is(.card-tiles, .card-items, .card-compare)[data-closed] .card-radio {
   border-style: dashed;
-  border-color: var(--border);
-  background: var(--surface-subtle);
 }
 .card-pick-send .choice-card-done {
   display: inline-flex;
