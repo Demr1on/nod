@@ -1,6 +1,14 @@
-import { useState } from 'react';
-import { mapLocationUrl, type Presentation } from '../../shared/presentation';
-import { AlertCircle, ChevronDown, ExternalLink } from './icons';
+import { createContext, useContext, useState, type ReactNode } from 'react';
+import { compareColumn, mapLocationUrl, type Presentation } from '../../shared/presentation';
+import { AlertCircle, Check, ChevronDown, ExternalLink } from './icons';
+
+export interface CardPick {
+  chosen: number[];
+  disabled: boolean;
+  choose(index: number): void;
+}
+
+export const CardPickContext = createContext<CardPick | null>(null);
 
 type Visual<T extends Presentation['type']> = Extract<Presentation, { type: T }>;
 type Item = Visual<'items'>['items'][number];
@@ -27,42 +35,224 @@ export function CardNote({ note }: { note?: string }) {
   return note ? <p className="card-band card-note">{note}</p> : null;
 }
 
+function Chips({ badge, tags }: { badge?: string; tags?: string[] }) {
+  if (!badge && !tags?.length) return null;
+  return (
+    <span className="card-chips">
+      {badge && <span className="card-badge">{badge}</span>}
+      {tags?.map((tag, index) => (
+        <span key={index} className="card-tag">
+          {tag}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function Choosable({
+  index,
+  className,
+  pick,
+  children,
+}: {
+  index: number;
+  className: string;
+  pick: CardPick;
+  children: ReactNode;
+}) {
+  const chosen = pick.chosen.includes(index);
+  return (
+    <button
+      type="button"
+      className={className}
+      data-choice
+      aria-pressed={chosen}
+      aria-disabled={pick.disabled || undefined}
+      onClick={() => {
+        if (!pick.disabled) pick.choose(index);
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Picture({
+  item,
+  className,
+  keepSpace,
+}: {
+  item: Item;
+  className: string;
+  keepSpace?: boolean;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (!item.image || typeof item.image !== 'object' || failed)
+    return keepSpace ? <span className={className} aria-hidden="true" /> : null;
+  return (
+    <img
+      className={className}
+      src={`/api/artifacts/${item.image.artifactId}`}
+      alt={item.image.alt}
+      loading="lazy"
+      draggable={false}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+const pictured = (item: Item) => Boolean(item.image && typeof item.image === 'object');
+
+function Tiles({ visual }: { visual: Visual<'items'> }) {
+  const pick = useContext(CardPickContext);
+  return (
+    <div className="card-band">
+      <ul
+        className="card-tiles"
+        data-settled={(pick && pick.chosen.length > 0) || undefined}
+        data-count={visual.items.length % 3 === 0 || visual.items.length === 5 ? 3 : 2}
+      >
+        {visual.items.map((item, index) => {
+          const link = item.url ?? (item.location && mapLocationUrl(item.location));
+          const body = (
+            <>
+              <Picture item={item} className="card-tile-image" />
+              <span className="card-tile-top">
+                {visual.ranked && <span className="card-rank">{index + 1}</span>}
+                {item.badge && <span className="card-badge">{item.badge}</span>}
+                {pick && (
+                  <span className="card-radio" data-on={pick.chosen.includes(index) || undefined}>
+                    {pick.chosen.includes(index) && <Check size={12} aria-hidden="true" />}
+                  </span>
+                )}
+              </span>
+              <span className="card-title">{item.title}</span>
+              {item.sub && <span className="card-sub">{item.sub}</span>}
+              {item.detail && <span className="card-tile-detail">{item.detail}</span>}
+              {item.tags && <Chips tags={item.tags} />}
+              {item.value && (
+                <span className="card-tile-value">
+                  {item.value}
+                  {item.valueSub && <small>{item.valueSub}</small>}
+                </span>
+              )}
+            </>
+          );
+          return (
+            <li
+              key={index}
+              data-badge={item.badge ? true : undefined}
+              data-chosen={pick?.chosen.includes(index) || undefined}
+            >
+              {pick ? (
+                <Choosable index={index} className="card-tile" pick={pick}>
+                  {body}
+                </Choosable>
+              ) : link ? (
+                <a
+                  className="card-tile"
+                  href={link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  referrerPolicy="no-referrer"
+                >
+                  {body}
+                </a>
+              ) : (
+                <div className="card-tile">{body}</div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 export function Items({ visual }: { visual: Visual<'items'> }) {
+  const count = visual.items.length;
+  const simple = visual.items.every(
+    (item) =>
+      item.value &&
+      !item.status &&
+      !item.route &&
+      !item.location &&
+      !item.warning &&
+      (item.detail?.length ?? 0) <= 160 &&
+      !item.facts?.length,
+  );
+  const gallery = visual.items.every(
+    (item) => pictured(item) && !item.status && !item.route && !item.facts?.length,
+  );
+  if (
+    visual.layout !== 'list' &&
+    count > 1 &&
+    (visual.layout === 'tiles'
+      ? count <= 6 && visual.items.every((item) => !item.facts?.length)
+      : (count <= 4 && simple) || (count <= 6 && gallery))
+  )
+    return <Tiles visual={visual} />;
+  return <List visual={visual} />;
+}
+
+function List({ visual }: { visual: Visual<'items'> }) {
   const located = visual.items.every((item) => item.location) ? (visual.items as Located[]) : null;
   const [open, setOpen] = useState<number | null>(null);
   const [selected, setSelected] = useState(0);
+  const pick = useContext(CardPickContext);
   const dots = visual.items.some((item) => item.status);
+  const pinned = Boolean(located && located.length > 1);
+  const gutter = pick ? 'choice' : dots ? 'dot' : pinned || visual.ranked ? 'index' : undefined;
+  const usualDate = mostCommon(visual.items.map((item) => item.route?.from.note));
+  const pictured = visual.items.some((item) => item.image);
   return (
     <div className="card-band">
-      {visual.label && (
-        <p className="card-label">
-          {visual.label} <span>{visual.items.length}</span>
-        </p>
-      )}
+      {visual.label && <p className="card-label">{visual.label}</p>}
       {located && located.length > 1 && (
         <Pins items={located} selected={selected} onSelect={setSelected} />
       )}
       <ul
         className="card-items"
-        data-gutter={dots ? 'dot' : located && located.length > 1 ? 'index' : undefined}
+        data-gutter={gutter}
+        data-settled={(pick && pick.chosen.length > 0) || undefined}
       >
         {visual.items.map((item, index) => {
           const expandable = Boolean(item.detail || item.facts);
           const link = item.url ?? (item.location && mapLocationUrl(item.location));
+          const chosen = pick?.chosen.includes(index);
           const row = (
             <>
-              {dots && <span className="card-dot" data-tone={item.status?.tone ?? 'none'} />}
-              {located && located.length > 1 && <span className="card-index">{index + 1}</span>}
+              {gutter === 'choice' && (
+                <span className="card-radio" data-on={chosen || undefined}>
+                  {chosen && <Check size={12} aria-hidden="true" />}
+                </span>
+              )}
+              {gutter === 'dot' && (
+                <span className="card-dot" data-tone={item.status?.tone ?? 'none'} />
+              )}
+              {gutter === 'index' && <span className="card-index">{index + 1}</span>}
+              <Picture item={item} className="card-thumb" keepSpace={pictured} />
               <span className="card-main">
-                <span className="card-title">{item.title}</span>
-                {(item.status || item.sub) && (
-                  <span className="card-sub">
-                    {item.status && <span className="card-row-status">{item.status.label}</span>}
-                    {item.status && item.sub && ' · '}
-                    {item.sub}
-                  </span>
+                {item.route ? (
+                  <RouteLine item={item} usualDate={usualDate} />
+                ) : (
+                  <>
+                    <span className="card-title-line">
+                      <span className="card-title">{item.title}</span>
+                      {item.badge && <span className="card-badge">{item.badge}</span>}
+                    </span>
+                    {(item.status || item.sub) && (
+                      <span className="card-sub">
+                        {item.status && (
+                          <span className="card-row-status">{item.status.label}</span>
+                        )}
+                        {item.status && item.sub && ' · '}
+                        {item.sub}
+                      </span>
+                    )}
+                    {item.tags && <Chips tags={item.tags} />}
+                  </>
                 )}
-                {item.route && <Route route={item.route} />}
                 {item.warning && (
                   <span className="card-warning">
                     <AlertCircle size={13} aria-hidden="true" />
@@ -76,22 +266,41 @@ export function Items({ visual }: { visual: Visual<'items'> }) {
                   {item.valueSub && <small>{item.valueSub}</small>}
                 </span>
               )}
-              {expandable ? (
+              {pick ? null : expandable ? (
                 <ChevronDown size={14} className="card-chevron" aria-hidden="true" />
               ) : (
                 link && <ExternalLink size={13} className="card-chevron" aria-hidden="true" />
               )}
             </>
           );
+          const toggle = (
+            <button
+              type="button"
+              className="card-toggle"
+              aria-expanded={open === index}
+              aria-label={open === index ? 'Hide details' : 'Show details'}
+              onClick={() => setOpen(open === index ? null : index)}
+            >
+              <ChevronDown size={14} aria-hidden="true" />
+            </button>
+          );
           return (
             <li
               key={index}
               data-open={open === index || undefined}
-              data-tall={item.route ? true : undefined}
+              data-tall={item.route || item.tags ? true : undefined}
+              data-chosen={chosen || undefined}
               data-selected={(located && selected === index) || undefined}
               onPointerEnter={located ? () => setSelected(index) : undefined}
             >
-              {expandable ? (
+              {pick ? (
+                <span className="card-row-pick">
+                  <Choosable index={index} className="card-row" pick={pick}>
+                    {row}
+                  </Choosable>
+                  {expandable && toggle}
+                </span>
+              ) : expandable ? (
                 <button
                   type="button"
                   className="card-row"
@@ -139,28 +348,40 @@ export function Items({ visual }: { visual: Visual<'items'> }) {
   );
 }
 
-function Route({ route }: { route: NonNullable<Item['route']> }) {
+function mostCommon(values: Array<string | undefined>) {
+  const counts = new Map<string, number>();
+  for (const value of values) if (value) counts.set(value, (counts.get(value) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
+function RouteLine({ item, usualDate }: { item: Item; usualDate?: string }) {
+  const route = item.route!;
+  const timed = Boolean(route.from.time && route.to.time);
+  const nextDay = Boolean(route.to.note && route.from.note && route.to.note !== route.from.note);
+  const otherDate = route.from.note && route.from.note !== usualDate ? route.from.note : undefined;
+  const places = `${route.from.place} → ${route.to.place}`;
+  const via = route.middle && !item.valueSub ? `via ${route.middle.join(', ')}` : undefined;
   return (
-    <span className="card-route">
-      <span className="flight-route">
-        <span className="flight-airport">
-          {route.from.time && <strong>{route.from.time}</strong>}
-          <span className="flight-airport-code">{route.from.place}</span>
-          {route.from.note && <span className="flight-airport-date">{route.from.note}</span>}
+    <>
+      <span className="card-title-line">
+        <span className="card-times">
+          {timed ? (
+            <>
+              {route.from.time}
+              <span className="card-dash"> – </span>
+              {route.to.time}
+              {nextDay && <sup>+1</sup>}
+            </>
+          ) : (
+            places
+          )}
         </span>
-        <span className="flight-journey">
-          <span className="flight-track">
-            <i />
-          </span>
-          {route.middle?.map((line, index) => (
-            <span key={index}>{line}</span>
-          ))}
-        </span>
-        <span className="flight-airport">
-          {route.to.time && <strong>{route.to.time}</strong>}
-          <span className="flight-airport-code">{route.to.place}</span>
-          {route.to.note && <span className="flight-airport-date">{route.to.note}</span>}
-        </span>
+        {item.badge && <span className="card-badge">{item.badge}</span>}
+      </span>
+      <span className="card-sub">
+        {[otherDate, item.title, timed ? places : undefined, via, route.duration, item.sub]
+          .filter(Boolean)
+          .join(' · ')}
       </span>
       {route.stops?.map((stop, index) => (
         <span className="card-stop" key={index}>
@@ -168,7 +389,7 @@ function Route({ route }: { route: NonNullable<Item['route']> }) {
           {stop.detail && ` · ${stop.detail}`}
         </span>
       ))}
-    </span>
+    </>
   );
 }
 
@@ -221,24 +442,41 @@ function Pins({
 }
 
 export function Schedule({ visual }: { visual: Visual<'schedule'> }) {
+  const days: Array<{ day?: string; items: Visual<'schedule'>['items'] }> = [];
+  for (const item of visual.items) {
+    const last = days.at(-1);
+    if (last && (item.day === undefined || item.day === last.day)) last.items.push(item);
+    else days.push({ day: item.day, items: [item] });
+  }
   return (
     <div className="card-band">
-      <ol className="card-schedule">
-        {visual.items.map((item, index) => (
-          <li key={index} data-quiet={item.quiet || undefined}>
-            <span className="card-time">
-              {item.start}
-              {item.end && <small>{item.end}</small>}
-            </span>
-            <span className="card-bar" data-clash={item.clash || undefined} />
-            <span className="card-main">
-              <span className="card-title">{item.title}</span>
-              {item.detail && <small>{item.detail}</small>}
-            </span>
-          </li>
-        ))}
-      </ol>
+      {days.map((group, groupIndex) => (
+        <section key={groupIndex} className="card-day">
+          {group.day && <p className="card-label">{group.day}</p>}
+          <ScheduleItems items={group.items} />
+        </section>
+      ))}
     </div>
+  );
+}
+
+function ScheduleItems({ items }: { items: Visual<'schedule'>['items'] }) {
+  return (
+    <ol className="card-schedule">
+      {items.map((item, index) => (
+        <li key={index} data-quiet={item.quiet || undefined}>
+          <span className="card-time">
+            {item.start}
+            {item.end && <small>{item.end}</small>}
+          </span>
+          <span className="card-bar" data-clash={item.clash || undefined} />
+          <span className="card-main">
+            <span className="card-title">{item.title}</span>
+            {item.detail && <small>{item.detail}</small>}
+          </span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -255,52 +493,114 @@ function Facts({ items }: { items: Array<{ label: string; value: string; strong?
   );
 }
 
+function Stats({ items }: { items: NonNullable<Visual<'facts'>['stats']> }) {
+  return (
+    <dl className="card-stats" data-count={items.length}>
+      {items.map((item, index) => (
+        <div key={index}>
+          <dt>{item.label}</dt>
+          <dd>{item.value}</dd>
+          {item.sub && <dd className="card-stat-sub">{item.sub}</dd>}
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 export function FactList({ visual }: { visual: Visual<'facts'> }) {
   return (
-    <div className="card-band">
-      <Facts items={visual.items} />
-    </div>
+    <>
+      {visual.stats && (
+        <div className="card-band">
+          <Stats items={visual.stats} />
+        </div>
+      )}
+      {visual.items?.length ? (
+        <div className="card-band">
+          <Facts items={visual.items} />
+        </div>
+      ) : null}
+    </>
   );
 }
 
 export function Compare({ visual }: { visual: Visual<'compare'> }) {
+  const winner = visual.winner;
+  const columns = visual.columns.map(compareColumn);
+  const pick = useContext(CardPickContext);
   return (
-    <div className="card-band">
-      <div className="card-compare-scroll">
-        <table className="card-compare">
-          <thead>
-            <tr>
-              <td />
-              {visual.columns.map((column, index) => (
-                <th key={index} scope="col">
-                  {column}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {visual.rows.map((row, rowIndex) => {
-              const largest = Math.max(0, ...(row.amounts ?? []));
-              return (
-                <tr key={rowIndex}>
-                  <th scope="row">{row.label}</th>
-                  {row.values.map((value, index) => (
-                    <td key={index} data-best={row.best === index || undefined}>
-                      {value}
-                      {row.amounts && largest > 0 && (
-                        <span className="card-barline" aria-hidden="true">
-                          <i style={{ width: `${(row.amounts[index]! / largest) * 100}%` }} />
+    <>
+      {visual.verdict && (
+        <div className="card-band card-verdict">
+          {winner !== undefined && <span className="card-badge">{columns[winner]?.label}</span>}
+          <p>{visual.verdict}</p>
+        </div>
+      )}
+      <div className="card-band">
+        <div className="card-compare-scroll">
+          <table className="card-compare" data-columns={visual.columns.length}>
+            <thead>
+              <tr>
+                <td />
+                {columns.map((column, index) => (
+                  <th
+                    key={index}
+                    scope="col"
+                    data-winner={winner === index || undefined}
+                    data-chosen={pick?.chosen.includes(index) || undefined}
+                  >
+                    <span className="card-contender">
+                      <span className="card-title">{column.label}</span>
+                      {column.sub && <span className="card-sub">{column.sub}</span>}
+                      {winner === index && <span className="card-pick">Pick</span>}
+                    </span>
+                    {pick && (
+                      <Choosable index={index} className="card-choose" pick={pick}>
+                        {pick.chosen.includes(index) ? (
+                          <>
+                            <Check size={12} aria-hidden="true" /> Chosen
+                          </>
+                        ) : (
+                          'Choose'
+                        )}
+                      </Choosable>
+                    )}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visual.rows.map((row, rowIndex) => {
+                const largest = Math.max(0, ...(row.amounts ?? []));
+                return (
+                  <tr key={rowIndex}>
+                    <th scope="row">{row.label}</th>
+                    {row.values.map((value, index) => (
+                      <td
+                        key={index}
+                        data-best={row.best === index || undefined}
+                        data-winner={winner === index || undefined}
+                      >
+                        <span className="card-cell">
+                          {row.best === index && (
+                            <Check size={12} className="card-best" aria-label="Better" />
+                          )}
+                          {value}
                         </span>
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                        {row.amounts && largest > 0 && (
+                          <span className="card-barline" aria-hidden="true">
+                            <i style={{ width: `${(row.amounts[index]! / largest) * 100}%` }} />
+                          </span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
-      {visual.verdict && <p className="card-verdict">{visual.verdict}</p>}
-    </div>
+    </>
   );
 }

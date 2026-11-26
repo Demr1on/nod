@@ -2,7 +2,7 @@ import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { isIP } from 'node:net';
 import { parse } from 'parse5';
-import type { LinkPreviewProvider, SiteIcon } from '../../ports/link-preview.ts';
+import type { LinkPreviewProvider, PreviewImage, SiteIcon } from '../../ports/link-preview.ts';
 import { publicUrl, type AddressResolver } from '../agent-browser/network.ts';
 import { rasterImageType } from '../raster-image.ts';
 
@@ -148,6 +148,29 @@ function iconLinks(html: string) {
   return [...links];
 }
 
+function pageImage(html: string) {
+  const document = parse(html);
+  const root = document.childNodes.find((node) => node.nodeName === 'html');
+  const head =
+    root && 'childNodes' in root ? root.childNodes.find((node) => node.nodeName === 'head') : null;
+  const found = new Map<string, string>();
+  for (const node of head && 'childNodes' in head ? head.childNodes : []) {
+    if (node.nodeName !== 'meta' || !('attrs' in node)) continue;
+    const attrs = new Map(node.attrs.map((attr) => [attr.name.toLowerCase(), attr.value]));
+    const key = (attrs.get('property') ?? attrs.get('name') ?? '').toLowerCase();
+    const content = attrs.get('content')?.trim();
+    if (content && !found.has(key)) found.set(key, content);
+  }
+  return (
+    found.get('og:image:secure_url') ??
+    found.get('og:image') ??
+    found.get('og:image:url') ??
+    found.get('twitter:image') ??
+    found.get('twitter:image:src') ??
+    null
+  );
+}
+
 export function createPublicLinkPreviewProvider(
   options: { resolver?: AddressResolver; request?: PreviewRequest; timeoutMs?: number } = {},
 ): LinkPreviewProvider {
@@ -205,6 +228,30 @@ export function createPublicLinkPreviewProvider(
     throw new Error('Too many preview redirects.');
   }
   return {
+    async image(value) {
+      const signal = AbortSignal.timeout(Math.min(6000, options.timeoutMs ?? 6000));
+      const imageMax = 3 * 1024 * 1024;
+      const raster = (body: Uint8Array): PreviewImage | null => {
+        const mimeType = rasterImageType(body);
+        return mimeType ? { bytes: body, mimeType } : null;
+      };
+      try {
+        const first = await fetchPublic(value, imageMax, false, signal);
+        if (/^image\//i.test(first.headers['content-type'] ?? '')) return raster(first.body);
+        if (
+          !/^(?:text\/html|application\/xhtml\+xml)(?:;|$)/i.test(
+            first.headers['content-type'] ?? '',
+          )
+        )
+          return null;
+        const href = pageImage(Buffer.from(first.body.subarray(0, 512 * 1024)).toString('utf8'));
+        if (!href || /^data:/i.test(href) || /\.svgz?(?:[?#]|$)/i.test(href)) return null;
+        const image = await fetchPublic(new URL(href, first.url).href, imageMax, false, signal);
+        return raster(image.body);
+      } catch {
+        return null;
+      }
+    },
     async icon(origin) {
       const signal = AbortSignal.timeout(Math.min(8000, options.timeoutMs ?? 8000));
       const fetchIcon = async (url: string): Promise<SiteIcon | null> => {

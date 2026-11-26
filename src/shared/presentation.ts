@@ -176,11 +176,24 @@ const pick = z
   .describe(
     'Ask the owner to choose from this card. Each row (items) or column (compare) becomes an answer choice below it, and the turn waits for the answer.',
   );
+const badge = text(24).describe(
+  'A two or three word highlight such as Top pick, Cheapest or Closest. At most one or two per card.',
+);
+const tags = z
+  .array(text(24))
+  .min(1)
+  .max(3)
+  .describe('Up to three short traits shown as chips, e.g. Terrace, Open late, €€.');
 const itemsPresentation = z.strictObject({
   ...common,
   type: z.literal('items'),
   pick: pick.optional(),
   label: text(80).optional(),
+  layout: z
+    .enum(['list', 'tiles'])
+    .describe('tiles shows two to six short options side by side as tiles; list is the default.')
+    .optional(),
+  ranked: z.boolean().describe('Number the rows as a ranking, best first.').optional(),
   items: z
     .array(
       z.strictObject({
@@ -188,6 +201,8 @@ const itemsPresentation = z.strictObject({
         sub: text(160)
           .describe('One concise subtitle line, e.g. neighbourhood · price tier.')
           .optional(),
+        badge: badge.optional(),
+        tags: tags.optional(),
         status: status.optional(),
         value: text(40)
           .describe('Short right-aligned figure or rating, e.g. €125 or 4.6 ★.')
@@ -205,6 +220,7 @@ const itemsPresentation = z.strictObject({
               .max(3)
               .describe('Places the trip passes through, in order.')
               .optional(),
+            duration: text(40).optional(),
             stops: z
               .array(
                 z.strictObject({ label: text(40), place: text(80), detail: text(160).optional() }),
@@ -229,6 +245,12 @@ const itemsPresentation = z.strictObject({
           .optional(),
         facts: z.array(fact).min(1).max(12).optional(),
         url: url.optional(),
+        image: z
+          .union([photo, url])
+          .describe(
+            'For a product, stay, venue or place: its public page or image URL. Nod adds the picture.',
+          )
+          .optional(),
       }),
     )
     .min(1)
@@ -243,6 +265,9 @@ const schedulePresentation = z.strictObject({
   items: z
     .array(
       z.strictObject({
+        day: text(40)
+          .describe('The day this item belongs to, e.g. Sat 28 Nov; items group under it.')
+          .optional(),
         start: text(40),
         end: text(40).optional(),
         title: text(120),
@@ -263,10 +288,22 @@ const factsPresentation = z.strictObject({
   status: status
     .describe('Only a state the evidence establishes, such as Confirmed or Pending.')
     .optional(),
+  stats: z
+    .array(
+      z.strictObject({
+        label: text(40),
+        value: text(24).describe('A short figure, e.g. €1,240, 4.6 ★, 12 days.'),
+        sub: text(60).optional(),
+      }),
+    )
+    .min(1)
+    .max(4)
+    .describe('One to four headline figures shown large above the details.')
+    .optional(),
   items: z
     .array(fact.extend({ strong: z.boolean().describe('A total or the key figure.').optional() }))
-    .min(1)
-    .max(20),
+    .max(20)
+    .optional(),
   note: text(220)
     .describe('One short line of context not already in the title; omit if redundant.')
     .optional(),
@@ -275,7 +312,25 @@ const comparePresentation = z.strictObject({
   ...common,
   type: z.literal('compare'),
   pick: pick.optional(),
-  columns: z.array(text(60)).min(2).max(4),
+  columns: z
+    .array(
+      z.union([
+        text(60),
+        z.strictObject({
+          label: text(60),
+          sub: text(60).describe('One short line under the name, e.g. the price.').optional(),
+        }),
+      ]),
+    )
+    .min(2)
+    .max(4),
+  winner: z
+    .number()
+    .int()
+    .min(0)
+    .max(3)
+    .describe('Column index of the recommended option, shown as the pick.')
+    .optional(),
   rows: z
     .array(
       z.strictObject({
@@ -298,11 +353,14 @@ const comparePresentation = z.strictObject({
     )
     .min(1)
     .max(12),
-  verdict: text(240).optional(),
+  verdict: text(240).describe('The one-line recommendation, shown first.').optional(),
   note: text(220)
     .describe('One short line of context not already in the title; omit if redundant.')
     .optional(),
 });
+
+export const compareColumn = (column: string | { label: string; sub?: string }) =>
+  typeof column === 'string' ? { label: column } : column;
 
 export const bugReportReplyHint =
   'Reply "send" to share this summary with the Nod team, or ignore it. To add a diagnostic report, send it from Nod on your computer.';
@@ -507,6 +565,14 @@ export const presentationSchema = z
           invalid('A pie or donut chart must contain a positive value.');
       }
     }
+    if (value.type === 'facts' && !value.items?.length && !value.stats?.length)
+      invalid('A facts card needs items or stats.');
+    if (
+      value.type === 'compare' &&
+      value.winner !== undefined &&
+      value.winner >= value.columns.length
+    )
+      invalid('The winner must point to a column.');
     if (value.type === 'compare')
       for (const row of value.rows) {
         if (row.values.length !== value.columns.length)
@@ -546,7 +612,11 @@ export const presentationInputSchema = z
   });
 
 function pickLabels(value: Presentation) {
-  if (value.type === 'compare') return value.columns.map((label) => ({ label }));
+  if (value.type === 'compare')
+    return value.columns.map(compareColumn).map((column) => ({
+      label: column.label,
+      ...(column.sub ? { description: column.sub } : {}),
+    }));
   if (value.type === 'items')
     return value.items.map((item) => {
       const times =
@@ -559,6 +629,18 @@ function pickLabels(value: Presentation) {
         ...(description ? { description: clip(description, 400) } : {}),
       };
     });
+  return [];
+}
+
+export function presentationChoices(value: Presentation) {
+  if (value.type === 'compare') return pickLabels(value);
+  if (
+    value.type === 'items' &&
+    value.items.length >= 2 &&
+    value.items.length <= 6 &&
+    !value.items.some((item) => item.status)
+  )
+    return pickLabels(value);
   return [];
 }
 
@@ -665,9 +747,9 @@ export function flightItems(value: FlightsPresentation): ItemsPresentation {
       ]
         .slice(0, 12)
         .map((fact) => ({ label: clip(fact.label, 80), value: clip(fact.value, 400) }));
-      const sub = [option.recommended ? 'Recommended' : undefined, option.label]
-        .filter(Boolean)
-        .join(' · ');
+      const sub = option.label;
+      const duration =
+        option.journeys[0]!.duration ?? (segments.length === 1 ? first.duration : undefined);
       return {
         title: clip(
           [
@@ -677,19 +759,26 @@ export function flightItems(value: FlightsPresentation): ItemsPresentation {
           ].join(' + '),
           160,
         ),
-        ...(sub ? { sub: clip(sub, 300) } : {}),
+        ...(sub ? { sub: clip(sub, 160) } : {}),
+        ...(option.recommended && option.status !== 'booked' ? { badge: 'Best' } : {}),
         ...(option.status === 'booked'
           ? { status: { label: 'Booked', tone: 'done' as const } }
           : {}),
         ...(option.price ? { value: option.price } : {}),
         ...(connections.length
-          ? { valueSub: changes(connections.length) }
-          : first.technicalStops?.length === 0
+          ? {
+              valueSub: clip(
+                `${changes(connections.length)} · ${connections.map((segment) => airportCode(segment.arrival.airport)).join(', ')}`,
+                48,
+              ),
+            }
+          : !first.technicalStops?.length
             ? { valueSub: 'Nonstop' }
             : {}),
         route: {
           from: stop(first.departure),
           to: stop(last.arrival),
+          ...(duration ? { duration: clip(duration, 40) } : {}),
           ...(connections.length
             ? {
                 middle: connections
@@ -710,6 +799,10 @@ export function presentationImages(
   value: Presentation,
 ): Array<{ artifactId: string; alt: string }> {
   if (value.type === 'image') return [value];
+  if (value.type === 'items')
+    return value.items.flatMap((item) =>
+      item.image && typeof item.image === 'object' ? [item.image] : [],
+    );
   if (value.type === 'booking')
     return [value, ...(value.alternatives ?? [])].flatMap((venue) => venue.photos ?? []);
   return [];
@@ -905,8 +998,10 @@ export function presentationText(value: Presentation) {
       lines.push(
         [
           item.title,
+          item.badge,
           item.status?.label,
           item.sub,
+          item.tags?.join(', '),
           [item.value, item.valueSub].filter(Boolean).join(' '),
           item.route &&
             [
@@ -932,6 +1027,7 @@ export function presentationText(value: Presentation) {
     for (const item of value.items)
       lines.push(
         [
+          item.day,
           [item.start, item.end].filter(Boolean).join('–'),
           item.title,
           item.detail,
@@ -943,12 +1039,23 @@ export function presentationText(value: Presentation) {
   }
   if (value.type === 'facts') {
     if (value.status) lines.push(value.status.label);
-    for (const item of value.items) lines.push(`${item.label}: ${item.value}`);
+    for (const stat of value.stats ?? [])
+      lines.push([`${stat.label}: ${stat.value}`, stat.sub].filter(Boolean).join(' · '));
+    for (const item of value.items ?? []) lines.push(`${item.label}: ${item.value}`);
   }
   if (value.type === 'compare') {
-    lines.push(value.columns.join(' | '));
-    for (const row of value.rows) lines.push(`${row.label}: ${row.values.join(' | ')}`);
     if (value.verdict) lines.push(value.verdict);
+    lines.push(
+      value.columns
+        .map(compareColumn)
+        .map((column, index) =>
+          [column.label, column.sub, index === value.winner ? '(pick)' : undefined]
+            .filter(Boolean)
+            .join(' '),
+        )
+        .join(' | '),
+    );
+    for (const row of value.rows) lines.push(`${row.label}: ${row.values.join(' | ')}`);
   }
   if ('note' in value && value.note) lines.push(value.note);
   if (value.type === 'diagram') {

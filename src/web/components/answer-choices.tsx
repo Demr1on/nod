@@ -14,6 +14,7 @@ export interface AnswerChoicesProps {
   question: { id: string; text: string };
   title: ReactNode;
   disabled?: boolean;
+  optionsOnCard?: boolean;
   onAnswer(text: string, answer: QuestionAnswer): Promise<boolean | 'unavailable'>;
 }
 
@@ -48,6 +49,7 @@ export function AnswerChoices({
   question,
   title,
   disabled = false,
+  optionsOnCard = false,
   onAnswer,
 }: AnswerChoicesProps) {
   const id = useId();
@@ -158,7 +160,8 @@ export function AnswerChoices({
         )}
       </div>
       <div className="choice-card-list" role="group" aria-labelledby={`${id}-question`}>
-        {options.map((option, index) => {
+        {optionsOnCard && <p className="choice-card-count">Tap one above, or type your own</p>}
+        {(optionsOnCard ? [] : options).map((option, index) => {
           const on = selected.includes(option.id);
           return (
             <button
@@ -191,7 +194,7 @@ export function AnswerChoices({
             className="answer-choices-write"
             value={text}
             maxLength={4000}
-            placeholder="Type your own answer"
+            placeholder={optionsOnCard ? 'Something else' : 'Type your own answer'}
             aria-label="Type your own answer"
             readOnly={locked}
             onChange={(event) => {

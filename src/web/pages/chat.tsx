@@ -28,7 +28,7 @@ import { appPages } from '../../shared/app-links';
 import type { QuestionAnswer } from '../../shared/answer-choices';
 import { integrationMetadata, integrationServices } from '../../shared/integrations';
 import { moreIdeasLine } from '../../shared/sender-apps';
-import { presentationText } from '../../shared/presentation';
+import { presentationPick, presentationText } from '../../shared/presentation';
 import { classifyVerificationReply, securityCodeIn } from '../../shared/verification-code';
 import { ChatTools } from '../components/chat-tools';
 import { ServiceLogo } from '../components/service-logo';
@@ -968,6 +968,30 @@ export function Chat({
           ...collapseScreenshotMessages(displayMessages.slice(unreadIndex)),
         ]
       : collapseScreenshotMessages(displayMessages);
+  const cardQuestions = new Map<string, Message>();
+  const questionsOnCard = new Set<string>();
+  visibleMessages.forEach((question, index) => {
+    const options = question.answerChoices?.options;
+    if (question.role !== 'assistant' || !options || question.answerChoices!.multiple) return;
+    for (const card of visibleMessages.slice(Math.max(0, index - 3), index).reverse()) {
+      if (card.role !== 'assistant') return;
+      const pick = card.presentation && presentationPick(card.presentation);
+      if (!pick) continue;
+      if (
+        card.turnId === question.turnId &&
+        pick.choices.length === options.length &&
+        pick.choices.every((choice, at) => choice.label === options[at]!.label)
+      ) {
+        cardQuestions.set(card.id, question);
+        questionsOnCard.add(question.id);
+      }
+      return;
+    }
+  });
+  const cardChoices = new Map<string, string>();
+  for (const message of visibleMessages)
+    if (message.role === 'user' && message.replyTo?.role === 'assistant')
+      cardChoices.set(message.replyTo.id, message.text);
   const fileKey = visibleMessages
     .map(
       (message) =>
@@ -2415,8 +2439,21 @@ export function Chat({
                       }
                       taskStopped={approvalTask(message)?.status === 'cancelled'}
                       answersDisabled={sending || !state.configuration.llmReady || welcoming}
+                      pickQuestion={cardQuestions.get(message.id)}
+                      choicesOnCard={questionsOnCard.has(message.id)}
+                      chosenText={cardChoices.get(message.id)}
+                      onChoose={async (value) => {
+                        const result = await send(value, [], {
+                          id: message.id,
+                          role: 'assistant',
+                          text: message.text,
+                        });
+                        if (!result.sent && result.error) throw new Error(result.error);
+                        return result.sent;
+                      }}
                       onAnswer={async (value, answer) => {
-                        if (replyTo?.id === message.id && composer.current?.hasDraft()) {
+                        const target = cardQuestions.get(message.id) ?? message;
+                        if (replyTo?.id === target.id && composer.current?.hasDraft()) {
                           composer.current.focus();
                           throw new Error(
                             'Send your answer from the composer to include your edits.',
@@ -2425,7 +2462,7 @@ export function Chat({
                         const result = await send(
                           value,
                           [],
-                          { id: message.id, role: 'assistant', text: message.text },
+                          { id: target.id, role: 'assistant', text: target.text },
                           'answer_choice',
                           undefined,
                           answer,
@@ -2434,10 +2471,10 @@ export function Chat({
                         if (!result.sent && result.error) throw new Error(result.error);
                         if (
                           result.sent &&
-                          replyTo?.id === message.id &&
+                          replyTo?.id === target.id &&
                           !composer.current?.hasDraft()
                         )
-                          setReplyTo((current) => (current?.id === message.id ? null : current));
+                          setReplyTo((current) => (current?.id === target.id ? null : current));
                         return result.sent;
                       }}
                       onApprove={

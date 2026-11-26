@@ -15,11 +15,12 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
-import { splitQuestion } from '../../shared/answer-choices';
+import { choiceAnswerText, splitQuestion } from '../../shared/answer-choices';
 import type { Activity, Message } from '../../shared/contracts';
 import { LiveLine } from './live-line';
 import { reactionEmoji } from '../../shared/emoji';
 import {
+  presentationChoices,
   presentationImages,
   presentationSchema,
   presentationText,
@@ -56,6 +57,7 @@ import { MessageLinkTooltip } from './message-link-tooltip';
 import { Tooltip } from './tooltip';
 import type { ImagePreview } from './attachment-images';
 import { MessagePresentation } from './message-presentation';
+import { CardPickContext, type CardPick } from './presentation-cards';
 import { BugReportCard } from './bug-report-card';
 import { ScheduleRunTrack } from './schedule-run';
 import { formatFullDateTime, formatTime, useDateFormat } from '../lib/date-format';
@@ -363,8 +365,16 @@ export function MessageBubble({
   handoffPaused,
   work,
   task,
+  pickQuestion,
+  choicesOnCard = false,
+  onChoose,
+  chosenText,
 }: {
   message: Message;
+  pickQuestion?: Message;
+  choicesOnCard?: boolean;
+  onChoose?(text: string): Promise<boolean>;
+  chosenText?: string;
   work?: MessageWork;
   task?: ReactNode;
   pendingAudio?: ImagePreview;
@@ -402,7 +412,7 @@ export function MessageBubble({
             ? onAnswer
               ? 'choices'
               : null
-            : message.choiceAnswer
+            : message.choiceAnswer && !choicesOnCard
               ? 'answered'
               : null;
   const outsideCard =
@@ -450,6 +460,73 @@ export function MessageBubble({
       )),
   );
   const [error, setError] = useState('');
+  const [tapped, setTapped] = useState<number | null>(null);
+  const pickOptions = pickQuestion?.answerChoices?.options;
+  const answeredIds = pickQuestion?.choiceAnswer?.choiceIds;
+  const openChoices =
+    !pickOptions && onChoose && message.role === 'assistant' && !streaming && message.presentation
+      ? presentationChoices(message.presentation).map((choice, index) => ({
+          ...choice,
+          id: String(index),
+        }))
+      : [];
+  const openChosen = openChoices.findIndex(
+    (choice) => chosenText !== undefined && choiceAnswerText([choice]) === chosenText,
+  );
+  const cardPick: CardPick | null = openChoices.length
+    ? {
+        chosen: openChosen >= 0 ? [openChosen] : tapped === null ? [] : [tapped],
+        disabled: answersDisabled || tapped !== null || openChosen >= 0,
+        choose(index) {
+          const choice = openChoices[index];
+          if (!choice || !onChoose) return;
+          setTapped(index);
+          setError('');
+          void onChoose(choiceAnswerText([choice])).then(
+            (sent) => {
+              if (!sent) {
+                setTapped(null);
+                setError('Your choice could not be sent. Try again.');
+              }
+            },
+            (cause) => {
+              setTapped(null);
+              setError(errorMessage(cause));
+            },
+          );
+        },
+      }
+    : pickOptions
+      ? {
+          chosen: answeredIds
+            ? pickOptions.flatMap((option, index) =>
+                answeredIds.includes(option.id) ? [index] : [],
+              )
+            : tapped === null
+              ? []
+              : [tapped],
+          disabled:
+            !pickQuestion!.answerChoicesPending || !onAnswer || answersDisabled || tapped !== null,
+          choose(index) {
+            const option = pickOptions[index];
+            if (!option || !onAnswer) return;
+            setTapped(index);
+            setError('');
+            void onAnswer(choiceAnswerText([option]), { choiceIds: [option.id] }).then(
+              (outcome) => {
+                if (outcome === false) {
+                  setTapped(null);
+                  setError('Your choice could not be sent. Try again.');
+                }
+              },
+              (cause) => {
+                setTapped(null);
+                setError(errorMessage(cause));
+              },
+            );
+          },
+        }
+      : null;
   const [copied, setCopied] = useState(false);
   const [quote, setQuote] = useState('');
   const [quotePoint, setQuotePoint] = useState({ left: 0, top: 0 });
@@ -843,6 +920,7 @@ export function MessageBubble({
                   title={cardTitle}
                   disabled={answersDisabled}
                   onAnswer={onAnswer!}
+                  optionsOnCard={choicesOnCard}
                 />
               ) : card === 'answered' ? (
                 <ChoiceAnswer
@@ -875,7 +953,9 @@ export function MessageBubble({
                     summary={message.presentation.summary}
                   />
                 ) : (
-                  <MessagePresentation value={message.presentation} messageId={message.id} />
+                  <CardPickContext.Provider value={cardPick}>
+                    <MessagePresentation value={message.presentation} messageId={message.id} />
+                  </CardPickContext.Provider>
                 ))}
               {message.role === 'assistant' && message.attachments.length > 0 && (
                 <MessageAttachments
@@ -1015,7 +1095,9 @@ export function MessageBubble({
           !streaming &&
           message.presentation &&
           (outsideCard || message.presentation.type === 'apps') && (
-            <MessagePresentation value={message.presentation} messageId={message.id} />
+            <CardPickContext.Provider value={cardPick}>
+              <MessagePresentation value={message.presentation} messageId={message.id} />
+            </CardPickContext.Provider>
           )}
         {message.role === 'assistant' && !streaming && message.approval?.fields && (
           <ApprovalCard approval={message.approval} disabled={answersDisabled} onAnswer={onApprove}>

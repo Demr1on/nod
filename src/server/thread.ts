@@ -21,7 +21,7 @@ import { appPages } from '../shared/app-links.ts';
 import { errorCode } from '../shared/error-code.ts';
 import { loopbackHost } from '../shared/loopback.ts';
 import { pendingAnswerChoicesSql } from './answer-choices.ts';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, join, posix } from 'node:path';
@@ -47,6 +47,7 @@ import {
 } from './artifacts.ts';
 import type { SpeechService } from './speech.ts';
 import type { GeneratedAudio } from '../ports/speech.ts';
+import type { PreviewImage } from '../ports/link-preview.ts';
 import type { Artifact, MessageReaction, SpeechReplyMode } from '../shared/contracts.ts';
 import type {
   BrowserConnectionRequest,
@@ -99,6 +100,35 @@ export const boss = new PgBoss({
   schema: process.env.PGBOSS_SCHEMA || 'pgboss',
   max: 10,
 });
+async function cardPictures(
+  presentation: Presentation | undefined,
+  fetchImage: ((url: string) => Promise<PreviewImage | null>) | undefined,
+): Promise<Array<PreviewImage | null>> {
+  if (presentation?.type !== 'items' || !fetchImage) return [];
+  const wanted = presentation.items.map((item, index) => {
+    if (index >= 8) return null;
+    if (typeof item.image === 'string') return { url: item.image, fallback: false };
+    if (!item.image && item.url) return { url: item.url, fallback: true };
+    return null;
+  });
+  const deadline = new Promise<null>((resolve) => setTimeout(resolve, 5000, null).unref());
+  const fetched = await Promise.all(
+    wanted.map((want) =>
+      want ? Promise.race([fetchImage(want.url).catch(() => null), deadline]) : null,
+    ),
+  );
+  const keys = fetched.map((picture) =>
+    picture ? createHash('sha256').update(picture.bytes).digest('hex') : '',
+  );
+  const repeated = (key: string) => keys.filter((other) => other === key).length > 1;
+  const fallbacks = fetched.filter((picture, index) => picture && wanted[index]?.fallback).length;
+  return fetched.map((picture, index) =>
+    picture && !(wanted[index]?.fallback && (fallbacks < 2 || repeated(keys[index]!)))
+      ? picture
+      : null,
+  );
+}
+
 const running = new Map<string, AbortController>();
 const inflight = new Set<Promise<void>>();
 const quickReplying = new Set<string>();
@@ -219,6 +249,7 @@ export interface ThreadDependencies {
     signal?: AbortSignal,
   ) => Promise<void>;
   readArtifact?: (threadId: string, path: string, maxBytes: number) => Promise<Uint8Array>;
+  cardImage?: (url: string) => Promise<PreviewImage | null>;
   mailCheck?: MailCheck;
   executeConfirmation?: (
     turnId: string,
@@ -2388,11 +2419,37 @@ async function executeTurn(turn: any, dependencies: ThreadDependencies) {
     const created = new Map<string, Artifact>();
     const cleanup: Array<() => Promise<void>> = [];
     let rolledBack = false;
+    const pictures = await cardPictures(presentation, dependencies.cardImage);
     try {
       const id = await current(async (client) => {
         afterRollback(client, () => {
           rolledBack = true;
         });
+        if (presentation?.type === 'items') {
+          const items = [];
+          for (const [index, item] of presentation.items.entries()) {
+            const picture = pictures[index];
+            if (typeof item.image !== 'string' && !picture) {
+              items.push(item);
+              continue;
+            }
+            const { image: _, ...rest } = item;
+            if (!picture) {
+              items.push(rest);
+              continue;
+            }
+            const stored = await artifacts.storeArtifact(
+              Buffer.from(picture.bytes),
+              `${item.title}.${picture.mimeType.split('/')[1]}`,
+              picture.mimeType,
+              threadId,
+              client,
+              (remove) => cleanup.push(remove),
+            );
+            items.push({ ...rest, image: { artifactId: stored.id, alt: item.title } });
+          }
+          presentation = { ...presentation, items };
+        }
         const files = new Map(attachments.map((file) => [file.id, file]));
         const references = replyFileReferences(text);
         const replacements: Array<{ start: number; end: number; artifact: Artifact }> = [];
