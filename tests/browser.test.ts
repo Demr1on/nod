@@ -5876,7 +5876,9 @@ describe('interface components', { concurrency: interfaceLanes }, () => {
       assert.equal(viewed().length, 3);
       const count = pending.length;
       await click('.answer-choice');
-      await click('.answer-choice');
+      assert.equal(pending.length, count);
+      await click('.answer-choices-done');
+      await click('.answer-choices-done');
       assert.equal(pending.length, count + 1);
       assert.equal(selected().length, 0);
       await finish(true);
@@ -5912,9 +5914,9 @@ describe('interface components', { concurrency: interfaceLanes }, () => {
       assert.equal(selected().at(-1).properties.option_count, 6);
       assert.equal(selected().at(-1).properties.selected_count, 1);
       await mount('typed');
-      assert.ok(document.querySelector('.answer-choices-send').hasAttribute('data-idle'));
+      assert.equal(document.querySelector('.answer-choices-done').getAttribute('aria-disabled'), 'true');
       await type(' PRIVATE_TYPED ');
-      await click('.answer-choices-send');
+      await click('.answer-choices-done');
       assert.deepEqual(pending.at(-1).selection, { custom: true });
       assert.equal(pending.at(-1).text, 'PRIVATE_TYPED');
       await finish(true);
@@ -5923,11 +5925,13 @@ describe('interface components', { concurrency: interfaceLanes }, () => {
       for (const [index, outcome] of ['unavailable', false, new Error('Synthetic rejection')].entries()) {
         await mount('rejected-' + index);
         await click('.answer-choice');
+        await click('.answer-choices-done');
         await finish(outcome);
         assert.equal(selected().length, 2);
       }
       await mount('late-consent');
       await click('.answer-choice');
+      await click('.answer-choices-done');
       consent(false);
       consent(true);
       await finish(true);
@@ -5935,6 +5939,7 @@ describe('interface components', { concurrency: interfaceLanes }, () => {
       await mount('late-account');
       await intersect(true);
       await click('.answer-choice');
+      await click('.answer-choices-done');
       const oldViews = viewed().length;
       setRequestAccount('synthetic-owner-two');
       await intersect(true);
@@ -5943,6 +5948,7 @@ describe('interface components', { concurrency: interfaceLanes }, () => {
       assert.equal(selected().length, 2);
       await mount('accepted-after-unmount');
       await click('.answer-choice');
+      await click('.answer-choices-done');
       const observer = observations.at(-1);
       await act(() => root.render(null));
       observer.intersect(true);
@@ -7600,6 +7606,7 @@ describe('interface components', { concurrency: interfaceLanes }, () => {
         await mountQuestion(true, { text: 'Unrelated draft stays here', attachments: [artifact] });
         choiceOutcome = 'question_unavailable';
         await act(async () => document.querySelector('.answer-choice').click());
+        await act(async () => document.querySelector('.answer-choices-done').click());
         await settle(() => choiceRequests.length === 4 && !document.querySelector('.answer-choices'));
         assert.equal(document.querySelector('[role="alert"]'), null);
         assert.equal(document.querySelector('[contenteditable]').textContent, 'Unrelated draft stays here');

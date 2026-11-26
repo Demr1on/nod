@@ -179,6 +179,24 @@ const pick = z
 const badge = text(24).describe(
   'A two or three word highlight such as Top pick, Cheapest or Closest. At most one or two per card.',
 );
+const journey = z.strictObject({
+  label: text(80),
+  summary: text(120).optional(),
+  legs: z
+    .array(
+      z.strictObject({
+        from: place,
+        to: place,
+        name: text(80).describe('The flight, train or service, e.g. BA 977.'),
+        detail: text(160).optional(),
+        after: text(160)
+          .describe('The change or wait before the next leg, e.g. Change at LHR · 2 hr.')
+          .optional(),
+      }),
+    )
+    .min(1)
+    .max(8),
+});
 const tags = z
   .array(text(24))
   .min(1)
@@ -244,6 +262,12 @@ const itemsInput = z.strictObject({
           )
           .optional(),
         facts: z.array(fact).min(1).max(12).optional(),
+        journeys: z
+          .array(journey)
+          .min(1)
+          .max(6)
+          .describe('Legs of a trip with changes, shown as a timeline when expanded.')
+          .optional(),
         url: url.optional(),
         image: z
           .union([photo, url])
@@ -373,8 +397,9 @@ const comparePresentation = z.strictObject({
           sub: text(60).describe('One short line under the name, e.g. the price.').optional(),
           image: z
             .union([photo, url])
-            .describe('Its public product page or image URL. Nod adds the picture.')
+            .describe('A direct https photo of it you saw. Nod adds the picture.')
             .optional(),
+          url: url.describe('Its own public product or listing page.').optional(),
         }),
       ]),
     )
@@ -417,7 +442,13 @@ const comparePresentation = z.strictObject({
 
 export const compareColumn = (
   column:
-    string | { label: string; sub?: string; image?: string | { artifactId: string; alt: string } },
+    | string
+    | {
+        label: string;
+        sub?: string;
+        url?: string;
+        image?: string | { artifactId: string; alt: string };
+      },
 ) => (typeof column === 'string' ? { label: column } : column);
 
 type PictureSlot = { url: string; fallback: boolean } | null;
@@ -427,21 +458,28 @@ const mapPage = (url: string) =>
     url,
   );
 
+const searchPage = (url: string) =>
+  /\/(search|suche|s)(\/|$|\?)|[?&](q|query|search|fs|k|keywords?)=/i.test(url);
+
+const ownPage = (url: string) => !mapPage(url) && !searchPage(url);
+
 export function pictureSlots(value: Presentation | undefined): PictureSlot[] {
   if (value?.type === 'items')
     return value.items.map((item, index) => {
       if (index >= 8) return null;
       if (typeof item.image === 'string') return { url: item.image, fallback: false };
-      if (!item.image && item.url && !item.route && !mapPage(item.url))
+      if (!item.image && item.url && !item.route && ownPage(item.url))
         return { url: item.url, fallback: true };
       return null;
     });
   if (value?.type === 'compare')
-    return value.columns.map((column) =>
-      typeof column === 'object' && typeof column.image === 'string'
-        ? { url: column.image, fallback: false }
-        : null,
-    );
+    return value.columns.map((column) => {
+      if (typeof column !== 'object') return null;
+      if (typeof column.image === 'string') return { url: column.image, fallback: false };
+      if (!column.image && column.url && ownPage(column.url))
+        return { url: column.url, fallback: true };
+      return null;
+    });
   return [];
 }
 
@@ -771,39 +809,37 @@ const clip = (value: string, length: number) =>
   value.length > length ? `${value.slice(0, length - 1)}…` : value;
 const changes = (count: number) => `${count} change${count === 1 ? '' : 's'}`;
 const airportCode = (airport: string) => airport.match(/\(([A-Z]{3})\)\s*$/)?.[1] ?? airport;
-const legFacts = (segment: FlightSegment) => {
+const flightLeg = (segment: FlightSegment, airlines: number) => {
   const connection = segment.connectionAfter;
-  const arrival = airportCode(segment.arrival.airport);
-  return [
-    {
-      label: segment.flightNumber ?? segment.airline,
-      value: [
-        `${airportCode(segment.departure.airport)} ${segment.departure.time} → ${arrival} ${segment.arrival.time}`,
-        segment.duration,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    },
-    ...(segment.technicalStops ?? []).map((stop) => ({
-      label: `Technical stop ${airportCode(stop.airport)}`,
-      value: stop.duration ?? 'Duration not given',
-    })),
-    ...(connection
-      ? [
-          {
-            label: `Change at ${arrival}`,
-            value:
-              [
-                connection.duration,
-                connection.airportChange === 'unknown' ? 'airport change unknown' : undefined,
-                connection.selfTransfer === 'unknown' ? 'self-transfer unknown' : undefined,
-              ]
-                .filter(Boolean)
-                .join(' · ') || 'Duration not given',
-          },
-        ]
-      : []),
-  ];
+  const detail = [
+    airlines > 1 && segment.flightNumber ? segment.airline : undefined,
+    segment.duration,
+    segment.operatedBy && `Operated by ${segment.operatedBy}`,
+    ...(segment.technicalStops ?? []).map((stop) =>
+      [`Technical stop ${airportCode(stop.airport)}`, stop.duration].filter(Boolean).join(' '),
+    ),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const after =
+    connection &&
+    [
+      `Change at ${airportCode(segment.arrival.airport)}`,
+      connection.duration ?? 'Duration not given',
+      connection.airportChange === 'yes' && 'Airport change',
+      connection.airportChange === 'unknown' && 'Airport change unknown',
+      connection.selfTransfer === 'yes' && 'Self-transfer',
+      connection.selfTransfer === 'unknown' && 'Self-transfer unknown',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  return {
+    from: stop(segment.departure),
+    to: stop(segment.arrival),
+    name: clip(segment.flightNumber ?? segment.airline, 80),
+    ...(detail ? { detail: clip(detail, 160) } : {}),
+    ...(after ? { after: clip(after, 160) } : {}),
+  };
 };
 const flightRisks = (segment: FlightSegment) => [
   ...(segment.connectionAfter?.airportChange === 'yes'
@@ -838,27 +874,30 @@ export function flightItems(value: FlightsPresentation): ItemsPresentation {
           .flatMap(flightRisks)
           .map((risk) => (option.journeys.length > 1 ? `${journey.label}: ${risk}` : risk)),
       );
+      const airlines = new Set(
+        option.journeys.flatMap((journey) => journey.segments.map((s) => s.airline)),
+      ).size;
+      const journeys = option.journeys.map((journey) => ({
+        label: clip(journey.label, 80),
+        summary: clip(
+          [
+            journey.duration,
+            journey.segments.length > 1
+              ? changes(journey.segments.length - 1)
+              : !journey.segments[0]!.technicalStops?.length && 'Nonstop',
+          ]
+            .filter(Boolean)
+            .join(' · '),
+          120,
+        ),
+        legs: journey.segments.map((segment) => flightLeg(segment, airlines)),
+      }));
       const facts = [
-        ...option.journeys.flatMap((journey) => [
-          {
-            label: journey.label,
-            value:
-              [
-                journey.duration,
-                journey.segments.length > 1 && changes(journey.segments.length - 1),
-              ]
-                .filter(Boolean)
-                .join(' · ') || 'One flight',
-          },
-          ...journey.segments.flatMap(legFacts),
-        ]),
         ...(option.bookingReference
           ? [{ label: 'Booking reference', value: option.bookingReference }]
           : []),
         ...(option.baggage ? [{ label: 'Baggage', value: option.baggage }] : []),
-      ]
-        .slice(0, 12)
-        .map((fact) => ({ label: clip(fact.label, 80), value: clip(fact.value, 400) }));
+      ].map((fact) => ({ label: clip(fact.label, 80), value: clip(fact.value, 400) }));
       const sub = option.label;
       const duration =
         option.journeys[0]!.duration ?? (segments.length === 1 ? first.duration : undefined);
@@ -900,7 +939,8 @@ export function flightItems(value: FlightsPresentation): ItemsPresentation {
             : {}),
         },
         ...(risks.length ? { warning: clip(risks.join('. '), 300) } : {}),
-        facts,
+        journeys,
+        ...(facts.length ? { facts } : {}),
         ...(option.url ? { url: option.url } : {}),
         ...(carrier(first.flightNumber)
           ? {
@@ -1149,6 +1189,21 @@ export function presentationText(value: Presentation) {
         lines.push([stop.label, stop.place, stop.detail].filter(Boolean).join(' · '));
       if (item.warning) lines.push(item.warning);
       if (item.detail) lines.push(item.detail);
+      for (const journey of item.journeys ?? []) {
+        lines.push([journey.label, journey.summary].filter(Boolean).join(' · '));
+        for (const leg of journey.legs) {
+          lines.push(
+            [
+              leg.name,
+              `${[leg.from.place, leg.from.time, leg.from.note].filter(Boolean).join(' ')} → ${[leg.to.place, leg.to.time, leg.to.note].filter(Boolean).join(' ')}`,
+              leg.detail,
+            ]
+              .filter(Boolean)
+              .join(' · '),
+          );
+          if (leg.after) lines.push(leg.after);
+        }
+      }
       for (const fact of item.facts ?? []) lines.push(`${fact.label}: ${fact.value}`);
     }
   }

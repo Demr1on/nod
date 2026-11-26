@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, Fragment, useContext, useState, type ReactNode } from 'react';
 import {
   compareColumn,
   mapLocationUrl,
@@ -11,10 +11,50 @@ import { AlertCircle, Check, ChevronDown, ExternalLink } from './icons';
 export interface CardPick {
   chosen: number[];
   disabled: boolean;
+  sent: boolean;
+  label?: string;
   choose(index: number): void;
+  send(written?: string): void;
 }
 
 export const CardPickContext = createContext<CardPick | null>(null);
+
+export function CardPickSend() {
+  const pick = useContext(CardPickContext);
+  const [text, setText] = useState('');
+  if (!pick || pick.sent) return null;
+  const written = text.trim();
+  const idle = pick.disabled || (!written && !pick.chosen.length);
+  const send = () => {
+    if (!idle) pick.send(written || undefined);
+  };
+  return (
+    <div className="card-band card-pick-send">
+      <input
+        className="card-pick-write"
+        value={text}
+        maxLength={4000}
+        placeholder="Something else"
+        aria-label="Type your own answer"
+        readOnly={pick.disabled}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+          event.preventDefault();
+          send();
+        }}
+      />
+      <button
+        type="button"
+        className="choice-card-done"
+        aria-disabled={idle || undefined}
+        onClick={send}
+      >
+        {written ? 'Send' : pick.label ? `Choose ${pick.label}` : 'Choose one'}
+      </button>
+    </div>
+  );
+}
 
 type Visual<T extends Presentation['type']> = Extract<Presentation, { type: T }>;
 type Item = Visual<'items'>['items'][number];
@@ -59,23 +99,28 @@ function Choosable({
   index,
   className,
   pick,
+  onChoose,
   children,
 }: {
   index: number;
   className: string;
   pick: CardPick;
+  onChoose?(): void;
   children: ReactNode;
 }) {
   const chosen = pick.chosen.includes(index);
+  const locked = pick.disabled || pick.sent;
   return (
     <button
       type="button"
       className={className}
       data-choice
       aria-pressed={chosen}
-      aria-disabled={pick.disabled || undefined}
+      aria-disabled={locked || undefined}
       onClick={() => {
-        if (!pick.disabled) pick.choose(index);
+        if (locked) return;
+        pick.choose(index);
+        onChoose?.();
       }}
     >
       {children}
@@ -126,7 +171,7 @@ function Tiles({ visual }: { visual: Visual<'items'> }) {
       )}
       <ul
         className="card-tiles"
-        data-settled={(pick && pick.chosen.length > 0) || undefined}
+        data-settled={pick?.sent || undefined}
         data-count={visual.items.length % 3 === 0 || visual.items.length === 5 ? 3 : 2}
         data-pictured={gallery || undefined}
       >
@@ -199,16 +244,19 @@ export function Items({ visual }: { visual: Visual<'items'> }) {
       !item.location &&
       !item.warning &&
       (item.detail?.length ?? 0) <= 160 &&
-      !item.facts?.length,
+      !item.facts?.length &&
+      !item.journeys,
   );
   const gallery =
     visual.items.filter(pictured).length >= Math.max(2, count - 1) &&
-    visual.items.every((item) => !item.status && !item.route && !item.facts?.length);
+    visual.items.every(
+      (item) => !item.status && !item.route && !item.facts?.length && !item.journeys,
+    );
   if (
     visual.layout !== 'list' &&
     count > 1 &&
     (visual.layout === 'tiles'
-      ? count <= 6 && visual.items.every((item) => !item.facts?.length)
+      ? count <= 6 && visual.items.every((item) => !item.facts?.length && !item.journeys)
       : (count <= 4 && simple) || (count <= 6 && gallery))
   )
     return <Tiles visual={visual} />;
@@ -235,10 +283,10 @@ function List({ visual }: { visual: Visual<'items'> }) {
         className="card-items"
         data-gutter={gutter}
         data-pictured={pictured || undefined}
-        data-settled={(pick && pick.chosen.length > 0) || undefined}
+        data-settled={pick?.sent || undefined}
       >
         {visual.items.map((item, index) => {
-          const expandable = Boolean(item.detail || item.facts);
+          const expandable = Boolean(item.detail || item.facts || item.journeys);
           const link = item.url ?? (item.location && mapLocationUrl(item.location));
           const chosen = pick?.chosen.includes(index);
           const row = (
@@ -321,7 +369,12 @@ function List({ visual }: { visual: Visual<'items'> }) {
             >
               {pick ? (
                 <span className="card-row-pick">
-                  <Choosable index={index} className="card-row" pick={pick}>
+                  <Choosable
+                    index={index}
+                    className="card-row"
+                    pick={pick}
+                    onChoose={expandable ? () => setOpen(index) : undefined}
+                  >
                     {row}
                   </Choosable>
                   {expandable && toggle}
@@ -351,6 +404,9 @@ function List({ visual }: { visual: Visual<'items'> }) {
               {open === index && (
                 <div className="card-detail">
                   {item.detail && <p>{item.detail}</p>}
+                  {item.journeys?.map((journey, index) => (
+                    <Journey key={index} journey={journey} />
+                  ))}
                   {item.facts && <Facts items={item.facts} />}
                   {link && (
                     <a
@@ -560,6 +616,47 @@ function ScheduleItems({ items }: { items: Visual<'schedule'>['items'] }) {
   );
 }
 
+function Journey({ journey }: { journey: NonNullable<Item['journeys']>[number] }) {
+  return (
+    <section className="card-journey">
+      <header>
+        <span>{journey.label}</span>
+        {journey.summary && <small>{journey.summary}</small>}
+      </header>
+      <ol>
+        {journey.legs.map((leg, index) => {
+          const date = index === 0 || leg.from.note !== journey.legs[index - 1]!.to.note;
+          return (
+            <Fragment key={index}>
+              <li data-kind="stop">
+                <time>{leg.from.time}</time>
+                <b>{leg.from.place}</b>
+                {date && leg.from.note && <small>{leg.from.note}</small>}
+              </li>
+              <li data-kind="leg">
+                <span>
+                  {leg.name}
+                  {leg.detail && <small> · {leg.detail}</small>}
+                </span>
+              </li>
+              <li data-kind="stop">
+                <time>{leg.to.time}</time>
+                <b>{leg.to.place}</b>
+                {leg.to.note && leg.to.note !== leg.from.note && <small>{leg.to.note}</small>}
+              </li>
+              {leg.after && (
+                <li data-kind="wait">
+                  <span>{leg.after}</span>
+                </li>
+              )}
+            </Fragment>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 function Facts({ items }: { items: Array<{ label: string; value: string; strong?: boolean }> }) {
   return (
     <dl className="card-facts">
@@ -610,48 +707,63 @@ export function Compare({ visual }: { visual: Visual<'compare'> }) {
   const pick = useContext(CardPickContext);
   return (
     <>
-      {visual.verdict && (
-        <div className="card-band card-verdict">
-          {winner !== undefined && <span className="card-badge">{columns[winner]?.label}</span>}
-          <p>{visual.verdict}</p>
-        </div>
-      )}
+      {visual.verdict && <p className="card-band card-verdict">{visual.verdict}</p>}
       <div className="card-band">
         <div className="card-compare-scroll">
-          <table className="card-compare" data-columns={visual.columns.length}>
+          <table
+            className="card-compare"
+            data-columns={visual.columns.length}
+            data-settled={pick?.sent || undefined}
+          >
             <thead>
               <tr>
                 <td />
-                {columns.map((column, index) => (
-                  <th
-                    key={index}
-                    scope="col"
-                    data-winner={winner === index || undefined}
-                    data-chosen={pick?.chosen.includes(index) || undefined}
-                  >
-                    <span className="card-contender">
+                {columns.map((column, index) => {
+                  const chosen = pick?.chosen.includes(index) ?? false;
+                  const body = (
+                    <>
                       <Picture
                         item={column}
                         className="card-contender-image"
                         keepSpace={columns.some((other) => other.image)}
                       />
-                      <span className="card-title">{column.label}</span>
-                      {column.sub && <span className="card-sub">{column.sub}</span>}
+                      <span className="card-contender-text">
+                        <span className="card-title">
+                          {column.url && !pick ? (
+                            <a href={column.url} target="_blank" rel="noreferrer">
+                              {column.label}
+                            </a>
+                          ) : (
+                            column.label
+                          )}
+                        </span>
+                        {column.sub && <span className="card-sub">{column.sub}</span>}
+                      </span>
                       {winner === index && <span className="card-pick">Pick</span>}
-                    </span>
-                    {pick && (
-                      <Choosable index={index} className="card-choose" pick={pick}>
-                        {pick.chosen.includes(index) ? (
-                          <>
-                            <Check size={12} aria-hidden="true" /> Chosen
-                          </>
-                        ) : (
-                          'Choose'
-                        )}
-                      </Choosable>
-                    )}
-                  </th>
-                ))}
+                      {pick && (
+                        <span className="card-radio" data-on={chosen || undefined}>
+                          {chosen && <Check size={12} aria-hidden="true" />}
+                        </span>
+                      )}
+                    </>
+                  );
+                  return (
+                    <th
+                      key={index}
+                      scope="col"
+                      data-winner={winner === index || undefined}
+                      data-chosen={chosen || undefined}
+                    >
+                      {pick ? (
+                        <Choosable index={index} className="card-contender" pick={pick}>
+                          {body}
+                        </Choosable>
+                      ) : (
+                        <span className="card-contender">{body}</span>
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>

@@ -46,6 +46,39 @@
   color: var(--text-secondary);
   font-size: 13px;
 }
+.card-band.card-pick-send {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 0;
+}
+.card-pick-write {
+  flex: 1 1 140px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  outline: none;
+  color: var(--foreground);
+  background: var(--surface);
+  font: inherit;
+  font-size: 15px;
+}
+.card-pick-write::placeholder {
+  color: var(--muted-foreground);
+}
+.card-pick-write:focus-visible {
+  border-color: var(--ring);
+}
+.card-pick-send .choice-card-done {
+  flex: 0 1 auto;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .card-label {
   margin: 0 0 4px;
   color: var(--muted-foreground);
@@ -137,9 +170,9 @@
 }
 .card-thumb {
   flex: none;
-  width: 64px;
-  height: 64px;
-  border-radius: 10px;
+  width: 88px;
+  height: 88px;
+  border-radius: 12px;
   object-fit: cover;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
@@ -160,6 +193,11 @@ span:is(.card-thumb, .card-contender-image) {
   font-weight: 600;
 }
 @container (max-width: 440px) {
+  .card-thumb:not([data-logo]) {
+    width: 64px;
+    height: 64px;
+    border-radius: 10px;
+  }
   .card-tile-image {
     aspect-ratio: 16 / 9;
   }
@@ -561,6 +599,90 @@ a.card-row {
     transition: none;
   }
 }
+.card-journey {
+  display: grid;
+  gap: 8px;
+}
+.card-journey + .card-journey {
+  margin-top: 8px;
+}
+.card-journey header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 600;
+}
+.card-journey header small,
+.card-journey li small {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 400;
+}
+.card-journey ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.card-journey li {
+  position: relative;
+  padding-left: 90px;
+  font-variant-numeric: tabular-nums;
+}
+.card-journey li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 75px;
+  width: 2px;
+  background: var(--gray-50);
+}
+.card-journey li[data-kind='stop'] {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 20px;
+}
+.card-journey li[data-kind='stop']::before {
+  top: 5px;
+  bottom: auto;
+  left: 71px;
+  width: 10px;
+  height: 10px;
+  box-sizing: border-box;
+  border: 2px solid var(--muted-foreground);
+  border-radius: 50%;
+  background: transparent;
+}
+.card-journey li time {
+  position: absolute;
+  left: 0;
+  width: 62px;
+  text-align: right;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.card-journey li b {
+  font-weight: 600;
+}
+.card-journey li[data-kind='leg'],
+.card-journey li[data-kind='wait'] {
+  padding-block: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.card-journey li[data-kind='wait']::before {
+  background: none;
+  border-left: 2px dotted var(--gray-50);
+  width: 0;
+}
+.card-journey li[data-kind='wait'] span {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
 .card-facts {
   display: grid;
   gap: 6px;
@@ -647,39 +769,108 @@ a.card-row {
   width: 20%;
 }
 .card-compare thead th {
-  padding-bottom: 10px;
-  vertical-align: bottom;
+  height: 1px;
+  padding: 0 4px 12px;
+  vertical-align: top;
+}
+.card-compare thead th:last-child {
+  padding-right: 0;
 }
 .card-contender {
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   gap: 2px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 8px 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: inherit;
+  background: var(--surface-subtle);
+  font: inherit;
   font-size: 14px;
+  text-align: left;
+}
+button.card-contender {
+  cursor: pointer;
+}
+.message-presentation button.card-contender[aria-disabled] {
+  cursor: default;
+}
+.card-contender-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 2px;
 }
 .card-contender .card-title {
   font-weight: 600;
   line-height: 1.25;
 }
+.card-contender .card-title a {
+  color: inherit;
+}
 .card-contender .card-sub {
+  color: var(--muted-foreground);
   font-size: 12px;
+  line-height: 1.35;
+}
+.card-contender .card-pick,
+.card-contender .card-radio {
+  position: absolute;
+  top: 14px;
 }
 .card-contender .card-pick {
+  left: 14px;
+  background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+}
+.card-contender .card-radio {
+  right: 14px;
+  background: var(--surface);
+}
+.card-contender .card-radio[data-on] {
+  background: var(--primary);
+}
+.card-contender .card-radio {
+  width: 18px;
+  box-sizing: border-box;
+}
+.card-contender:not(:has(.card-contender-image)) .card-radio {
+  top: 9px;
+  right: 9px;
+}
+.card-contender:not(:has(.card-contender-image)) .card-pick {
+  position: static;
   order: -1;
-  margin-bottom: 4px;
+  align-self: flex-start;
+  margin-bottom: 6px;
+}
+.card-contender:not(:has(.card-contender-image)):has(.card-radio) .card-contender-text {
+  padding-right: 22px;
 }
 .card-contender-image {
-  order: -2;
   display: block;
+  box-sizing: border-box;
   width: 100%;
-  max-width: 112px;
-  aspect-ratio: 1;
+  aspect-ratio: 4 / 3;
   margin-bottom: 8px;
-  padding: 8px;
-  border: 1px solid var(--border);
+  padding: 10px;
   border-radius: 10px;
   object-fit: contain;
   background: #fff;
+}
+.card-compare th[data-winner] .card-contender {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+.card-compare th[data-chosen] .card-contender {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface-subtle));
+}
+.card-compare[data-settled] thead th:not([data-chosen]) {
+  opacity: 0.5;
 }
 .card-compare tbody th {
   padding-left: 0;
@@ -688,20 +879,11 @@ a.card-row {
 .card-compare tbody tr > * {
   border-top: 1px solid var(--border);
 }
-.card-compare :is(th, td)[data-winner] {
-  background: color-mix(in srgb, var(--primary) 6%, transparent);
-}
-.card-compare thead th[data-winner] {
-  border-radius: var(--control-radius) var(--control-radius) 0 0;
-}
-.card-compare tbody tr:last-child td[data-winner] {
-  border-radius: 0 0 var(--control-radius) var(--control-radius);
-}
 .card-cell {
   display: inline;
   color: var(--text-secondary);
 }
-.card-compare td[data-best] .card-cell {
+.card-compare td:is([data-best], [data-winner]) .card-cell {
   color: var(--foreground);
 }
 .card-best {
@@ -726,39 +908,8 @@ a.card-row {
   background: var(--foreground);
 }
 .card-verdict {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 6px 8px;
-}
-.card-verdict p {
-  flex: 1 1 240px;
   margin: 0;
-}
-.message-presentation .card-choose {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  width: 100%;
-  height: 30px;
-  margin-top: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-full);
-  color: var(--foreground);
-  background: var(--surface-subtle);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 550;
-  cursor: pointer;
-}
-.message-presentation .card-choose[aria-disabled] {
-  cursor: default;
-}
-.card-compare th[data-chosen] .card-choose {
-  border-color: var(--primary);
-  color: var(--primary-foreground);
-  background: var(--primary);
+  font-weight: 500;
 }
 @media (hover: hover) and (pointer: fine) {
   a.card-row:hover,
@@ -778,7 +929,7 @@ a.card-row {
   .message-presentation button.card-tile:not([aria-disabled]):hover {
     border-color: var(--gray-50);
   }
-  .message-presentation .card-choose:not([aria-disabled]):hover {
+  .message-presentation button.card-contender:not([aria-disabled]):hover {
     border-color: var(--gray-50);
   }
 }

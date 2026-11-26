@@ -1126,7 +1126,7 @@ test('flight journeys preserve every leg and distinguish connections from techni
   assert.deepEqual(row.route?.middle, ['LHR', 'DXB']);
   assert.match(row.warning ?? '', /Airport change at LHR/);
   assert.match(row.warning ?? '', /Self-transfer at LHR/);
-  const legs = JSON.stringify(row.facts);
+  const legs = JSON.stringify([row.journeys, row.facts]);
   for (const detail of [
     'ND123',
     'SA12',
@@ -1139,7 +1139,7 @@ test('flight journeys preserve every leg and distinguish connections from techni
     '45m',
     'Change at LHR',
     '11h 50m',
-    'self-transfer unknown',
+    'Self-transfer unknown',
   ])
     assert.ok(legs.includes(detail), detail);
   const returnLeg = flightItems({

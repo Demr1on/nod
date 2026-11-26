@@ -134,7 +134,7 @@ export function AnswerChoices({
   }
 
   function finish() {
-    void answer(multiple ? picked : [], typed);
+    void answer(picked, typed);
   }
 
   if (submitted === 'unavailable' || !options.length) return <>{title}</>;
@@ -168,14 +168,17 @@ export function AnswerChoices({
               key={option.id}
               type="button"
               className="answer-choice choice-card-row"
-              aria-pressed={multiple ? on : undefined}
+              aria-pressed={on}
               aria-disabled={locked}
               onClick={() => {
                 if (unavailable.current || pending.current) return;
                 setError('');
-                if (!multiple) return void answer([option], '');
                 setSelected((current) =>
-                  on ? current.filter((value) => value !== option.id) : [...current, option.id],
+                  !multiple
+                    ? [option.id]
+                    : on
+                      ? current.filter((value) => value !== option.id)
+                      : [...current, option.id],
                 );
               }}
             >
@@ -187,7 +190,7 @@ export function AnswerChoices({
           );
         })}
         <div className="choice-card-row choice-card-input">
-          <ChoiceBadge on={multiple && Boolean(typed)}>
+          <ChoiceBadge on={Boolean(typed) && (multiple || optionsOnCard)}>
             <PenLine size={14} />
           </ChoiceBadge>
           <input
@@ -207,7 +210,7 @@ export function AnswerChoices({
               finish();
             }}
           />
-          {!multiple && (
+          {optionsOnCard && (
             <button
               type="button"
               className="answer-choices-send choice-card-send"
@@ -223,21 +226,21 @@ export function AnswerChoices({
           )}
         </div>
       </div>
-      {(multiple || error) && (
+      {(!optionsOnCard || error) && (
         <div className="choice-card-footer">
           {error && (
             <p className="choice-card-error" role="alert">
               {error}
             </p>
           )}
-          {multiple && (
+          {!optionsOnCard && (
             <button
               type="button"
               className="answer-choices-done choice-card-done"
               aria-disabled={locked || !count}
               onClick={finish}
             >
-              Done
+              Send
             </button>
           )}
         </div>

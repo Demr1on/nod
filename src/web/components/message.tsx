@@ -408,13 +408,15 @@ export function MessageBubble({
         ? 'approval'
         : !message.answerChoices
           ? null
-          : message.answerChoicesPending
-            ? onAnswer
-              ? 'choices'
-              : null
-            : message.choiceAnswer && !choicesOnCard
-              ? 'answered'
-              : null;
+          : choicesOnCard
+            ? null
+            : message.answerChoicesPending
+              ? onAnswer
+                ? 'choices'
+                : null
+              : message.choiceAnswer
+                ? 'answered'
+                : null;
   const outsideCard =
     message.role === 'assistant' &&
     !streaming &&
@@ -460,7 +462,8 @@ export function MessageBubble({
       )),
   );
   const [error, setError] = useState('');
-  const [tapped, setTapped] = useState<number | null>(null);
+  const [picked, setPicked] = useState<number | null>(null);
+  const [sending, setSending] = useState(false);
   const pickOptions = pickQuestion?.answerChoices?.options;
   const answeredIds = pickQuestion?.choiceAnswer?.choiceIds;
   const openChoices =
@@ -473,60 +476,56 @@ export function MessageBubble({
   const openChosen = openChoices.findIndex(
     (choice) => chosenText !== undefined && choiceAnswerText([choice]) === chosenText,
   );
-  const cardPick: CardPick | null = openChoices.length
+  const pickChoices = openChoices.length ? openChoices : (pickOptions ?? []);
+  const answered = openChoices.length
+    ? openChosen >= 0
+      ? [openChosen]
+      : []
+    : pickOptions && answeredIds
+      ? pickOptions.flatMap((option, index) => (answeredIds.includes(option.id) ? [index] : []))
+      : [];
+  const pickedChoice = picked === null ? undefined : pickChoices[picked];
+  const cardPick: CardPick | null = pickChoices.length
     ? {
-        chosen: openChosen >= 0 ? [openChosen] : tapped === null ? [] : [tapped],
-        disabled: answersDisabled || tapped !== null || openChosen >= 0,
+        chosen: answered.length ? answered : picked === null ? [] : [picked],
+        sent: answered.length > 0 || Boolean(pickQuestion?.choiceAnswer) || sending,
+        disabled: openChoices.length
+          ? answersDisabled === true
+          : !pickQuestion!.answerChoicesPending || !onAnswer || answersDisabled === true,
+        label:
+          pickedChoice &&
+          (pickedChoice.description &&
+          pickChoices.filter((choice) => choice.label === pickedChoice.label).length > 1
+            ? `${pickedChoice.label} ${pickedChoice.description.split(' · ')[0]}`
+            : pickedChoice.label),
         choose(index) {
-          const choice = openChoices[index];
-          if (!choice || !onChoose) return;
-          setTapped(index);
+          setPicked(index);
           setError('');
-          void onChoose(choiceAnswerText([choice])).then(
-            (sent) => {
-              if (!sent) {
-                setTapped(null);
+        },
+        send(written) {
+          if (!written && !pickedChoice) return;
+          const text = written || choiceAnswerText([pickedChoice!]);
+          const outcome = openChoices.length
+            ? onChoose?.(text)
+            : onAnswer?.(text, written ? { custom: true } : { choiceIds: [pickedChoice!.id] });
+          if (!outcome) return;
+          setSending(true);
+          setError('');
+          void outcome.then(
+            (result) => {
+              if (result === false) {
+                setSending(false);
                 setError('Your choice could not be sent. Try again.');
               }
             },
             (cause) => {
-              setTapped(null);
+              setSending(false);
               setError(errorMessage(cause));
             },
           );
         },
       }
-    : pickOptions
-      ? {
-          chosen: answeredIds
-            ? pickOptions.flatMap((option, index) =>
-                answeredIds.includes(option.id) ? [index] : [],
-              )
-            : tapped === null
-              ? []
-              : [tapped],
-          disabled:
-            !pickQuestion!.answerChoicesPending || !onAnswer || answersDisabled || tapped !== null,
-          choose(index) {
-            const option = pickOptions[index];
-            if (!option || !onAnswer) return;
-            setTapped(index);
-            setError('');
-            void onAnswer(choiceAnswerText([option]), { choiceIds: [option.id] }).then(
-              (outcome) => {
-                if (outcome === false) {
-                  setTapped(null);
-                  setError('Your choice could not be sent. Try again.');
-                }
-              },
-              (cause) => {
-                setTapped(null);
-                setError(errorMessage(cause));
-              },
-            );
-          },
-        }
-      : null;
+    : null;
   const [copied, setCopied] = useState(false);
   const [quote, setQuote] = useState('');
   const [quotePoint, setQuotePoint] = useState({ left: 0, top: 0 });
@@ -920,7 +919,6 @@ export function MessageBubble({
                   title={cardTitle}
                   disabled={answersDisabled}
                   onAnswer={onAnswer!}
-                  optionsOnCard={choicesOnCard}
                 />
               ) : card === 'answered' ? (
                 <ChoiceAnswer
