@@ -1813,7 +1813,7 @@ async function checkRemoteConnection(connection) {
   try {
     response = await fetch(`${url}/api/session`, {
       headers: { Authorization: `Bearer ${token}` },
-      redirect: 'error',
+      redirect: 'manual',
       signal: AbortSignal.timeout(10000),
     });
   } catch (error) {

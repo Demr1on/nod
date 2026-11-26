@@ -1732,17 +1732,17 @@ export function createModelService(options: {
     register(app: FastifyInstance, capture?: CaptureAnalytics) {
       analytics = capture;
       void app.register(async (routes) => {
-        routes.setErrorHandler((error, _request, reply) =>
-          reply.code(400).send({
-            error:
-              error instanceof ConnectionError || error instanceof ModelAuthError
-                ? error.message
-                : 'The model connection request failed. Check the service and try again.',
+        routes.setErrorHandler((error, _request, reply) => {
+          if (error instanceof z.ZodError)
+            return reply.code(400).send({ error: 'Check the supplied values.' });
+          if (!(error instanceof ConnectionError || error instanceof ModelAuthError)) throw error;
+          return reply.code(400).send({
+            error: error.message,
             ...(error instanceof ModelWorkspaceSelectionError
               ? { workspaces: error.workspaces }
               : {}),
-          }),
-        );
+          });
+        });
         routes.get('/api/models', async () => service.view());
         routes.post('/api/models/keys', async (request) => {
           const { provider, key, ...settings } = keySchema.parse(request.body);

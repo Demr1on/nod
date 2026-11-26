@@ -2,7 +2,7 @@
 
 Releases from before the rename to Nod are the `desktop-v*` [GitHub releases](https://github.com/n8n-io/nod/releases).
 
-## 0.9.9 - 2026-11-26
+## 0.9.8 - 2026-11-26
 
 ### Features
 
@@ -14,6 +14,21 @@ Releases from before the rename to Nod are the `desktop-v*` [GitHub releases](ht
 
 ### Fixes
 
+- **schedules:** Let a schedule with a legacy time zone be paused or renamed. [#1514](https://github.com/n8n-io/nod/pull/1514) (052d1ac)
+- **chat:** Use singular review and grouped counts in booking cards. [#1511](https://github.com/n8n-io/nod/pull/1511) (8990546)
+- **mcp:** Pass structuredContent to the model when the text is only a summary. [#1476](https://github.com/n8n-io/nod/pull/1476) (cbda859)
+- **channels:** Preserve reply text when delivering attachments. [#1520](https://github.com/n8n-io/nod/pull/1520) (467b428)
+- **models:** Distinguish invalid requests from server failures. [#1523](https://github.com/n8n-io/nod/pull/1523) (c587455)
+- **web:** Keep vault surfaces open when Escape cancels an IME candidate. [#1472](https://github.com/n8n-io/nod/pull/1472) (3131c6c)
+- **web:** Keep the task title draft when Escape cancels an IME candidate. [#1342](https://github.com/n8n-io/nod/pull/1342) (fc26078)
+- **tasks:** Give the model the task ledger as untrusted data. [#1496](https://github.com/n8n-io/nod/pull/1496) (16692b0)
+- **onboarding:** Read JSON text in an app result as JSON before masking links. [#1504](https://github.com/n8n-io/nod/pull/1504) (86155fb)
+- **schedules:** Project monthly and rare schedules correctly. [#1315](https://github.com/n8n-io/nod/pull/1315) (292320a)
+- **speech:** Keep the service's reason and stop calling a rate limit a credit problem. [#1334](https://github.com/n8n-io/nod/pull/1334) (97ddc18)
+- **trust:** Refuse a single unmatched term object. [#1499](https://github.com/n8n-io/nod/pull/1499) (ecfe5fe)
+- **desktop:** Show the redirect status when the server connection check is redirected. [#1513](https://github.com/n8n-io/nod/pull/1513) (8d1f214)
+- **browser:** Stop mouse side buttons over browser handoff from navigating the Nod page. [#1503](https://github.com/n8n-io/nod/pull/1503) (fe6f6d3)
+- **release:** Unblock 0.9.8 after the failed 0.9.8 and 0.9.9 builds. [#1529](https://github.com/n8n-io/nod/pull/1529) (78e4582)
 - **release:** Retry GitHub server errors without creating a second draft. [#1525](https://github.com/n8n-io/nod/pull/1525) (2d767e4)
 - **channels:** Explain where the Telegram bot replies. [#1522](https://github.com/n8n-io/nod/pull/1522) (5b6d3df)
 - **installer:** Check for Windows x64 before downloading Nod. [#1521](https://github.com/n8n-io/nod/pull/1521) (6aa519e)
@@ -24,6 +39,10 @@ Releases from before the rename to Nod are the `desktop-v*` [GitHub releases](ht
 - **apps:** Tidy connect page. [#1491](https://github.com/n8n-io/nod/pull/1491) (b51f38d)
 - **memory:** Save what the owner asks to remember, in any language. [#1490](https://github.com/n8n-io/nod/pull/1490) (1423455)
 
+### Documentation
+
+- Match four sentences to current behaviour. [#1512](https://github.com/n8n-io/nod/pull/1512) (2e2b2a2)
+
 <details>
 <summary>Maintenance (1 changes)</summary>
 
@@ -31,34 +50,12 @@ Releases from before the rename to Nod are the `desktop-v*` [GitHub releases](ht
 
 </details>
 
-[Full changelog](https://github.com/n8n-io/nod/compare/nod-v0.9.7...2d767e4f61389d6e3b05fc66755aca9354ad9c3e)
+[Full changelog](https://github.com/n8n-io/nod/compare/nod-v0.9.7...052d1ac1681ccd85dc28a0c66f4c5416612e16d3)
 
 <details>
 <summary>Build details</summary>
 
-Source: `2d767e4f61389d6e3b05fc66755aca9354ad9c3e`
-Previous release: `nod-v0.9.7`
-
-</details>
-
-## 0.9.8 - 2026-11-25
-
-### Features
-
-- **analytics:** Record the setup failure code and step. [#1488](https://github.com/n8n-io/nod/pull/1488) (502baeb)
-
-### Fixes
-
-- **channels:** Prove the owner from their own chat and send Nod's messages where they last wrote. [#1493](https://github.com/n8n-io/nod/pull/1493) (b444e27)
-- **apps:** Tidy connect page. [#1491](https://github.com/n8n-io/nod/pull/1491) (b51f38d)
-- **memory:** Save what the owner asks to remember, in any language. [#1490](https://github.com/n8n-io/nod/pull/1490) (1423455)
-
-[Full changelog](https://github.com/n8n-io/nod/compare/nod-v0.9.7...b444e276b36c8d213d4fdd3db47f90ec4f73b285)
-
-<details>
-<summary>Build details</summary>
-
-Source: `b444e276b36c8d213d4fdd3db47f90ec4f73b285`
+Source: `052d1ac1681ccd85dc28a0c66f4c5416612e16d3`
 Previous release: `nod-v0.9.7`
 
 </details>
