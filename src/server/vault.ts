@@ -1087,7 +1087,7 @@ export async function createVault(pool: Pool, options: VaultOptions) {
        LEFT JOIN turns u ON u.id=v.turn_id AND u.owner_id=v.owner_id
        WHERE v.owner_id=$1 AND v.root_turn_id=$2 AND v.origin=$3 AND v.kind=$4
        AND (v.item_id IS NULL OR v.item_id=$5) AND ($6::timestamptz IS NULL OR v.created_at>=$6)
-       AND ($7::text IS NULL OR u.session_id=$7) LIMIT 1`,
+       AND ($7::uuid IS NULL OR u.session_id=$7::uuid) LIMIT 1`,
       [
         owner,
         rootTurnId,
