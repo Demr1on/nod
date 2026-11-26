@@ -184,7 +184,7 @@ const tags = z
   .min(1)
   .max(3)
   .describe('Up to three short traits shown as chips, e.g. Terrace, Open late, €€.');
-const itemsPresentation = z.strictObject({
+const itemsInput = z.strictObject({
   ...common,
   type: z.literal('items'),
   pick: pick.optional(),
@@ -259,6 +259,58 @@ const itemsPresentation = z.strictObject({
     .describe('One short line of context not already in the title; omit if redundant.')
     .optional(),
 });
+const itemsPresentation = itemsInput.extend({
+  map: z
+    .strictObject({
+      zoom: z.number().int().min(2).max(16),
+      x: z.number().int(),
+      y: z.number().int().min(0),
+      columns: z.number().int().min(1).max(4),
+      tiles: z
+        .array(z.strictObject({ artifactId: z.uuid(), alt: text(500) }))
+        .min(1)
+        .max(8),
+    })
+    .optional(),
+});
+
+export const mapTileSize = 256;
+
+export function mapPoint(location: { latitude: number; longitude: number }, zoom: number) {
+  const size = mapTileSize * 2 ** zoom;
+  const sin = Math.sin((Math.max(-85, Math.min(85, location.latitude)) * Math.PI) / 180);
+  return {
+    x: ((location.longitude + 180) / 360) * size,
+    y: (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * size,
+  };
+}
+
+export function mapFrame(
+  locations: Array<{ latitude: number; longitude: number }>,
+  columns = 4,
+  rows = 2,
+) {
+  if (!locations.length) return null;
+  const pad = 36;
+  for (let zoom = 16; zoom >= 2; zoom--) {
+    const points = locations.map((location) => mapPoint(location, zoom));
+    const xs = points.map((point) => point.x);
+    const ys = points.map((point) => point.y);
+    const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const x = Math.round(centerX / mapTileSize - columns / 2);
+    const y = Math.max(0, Math.min(2 ** zoom - rows, Math.round(centerY / mapTileSize - rows / 2)));
+    const fits = points.every(
+      (point) =>
+        point.x >= x * mapTileSize + pad &&
+        point.x <= (x + columns) * mapTileSize - pad &&
+        point.y >= y * mapTileSize + pad &&
+        point.y <= (y + rows) * mapTileSize - pad,
+    );
+    if (fits) return { zoom, x, y, columns, rows };
+  }
+  return null;
+}
 const schedulePresentation = z.strictObject({
   ...common,
   type: z.literal('schedule'),
@@ -319,6 +371,10 @@ const comparePresentation = z.strictObject({
         z.strictObject({
           label: text(60),
           sub: text(60).describe('One short line under the name, e.g. the price.').optional(),
+          image: z
+            .union([photo, url])
+            .describe('Its public product page or image URL. Nod adds the picture.')
+            .optional(),
         }),
       ]),
     )
@@ -359,8 +415,58 @@ const comparePresentation = z.strictObject({
     .optional(),
 });
 
-export const compareColumn = (column: string | { label: string; sub?: string }) =>
-  typeof column === 'string' ? { label: column } : column;
+export const compareColumn = (
+  column:
+    string | { label: string; sub?: string; image?: string | { artifactId: string; alt: string } },
+) => (typeof column === 'string' ? { label: column } : column);
+
+type PictureSlot = { url: string; fallback: boolean } | null;
+
+export function pictureSlots(value: Presentation | undefined): PictureSlot[] {
+  if (value?.type === 'items')
+    return value.items.map((item, index) => {
+      if (index >= 8) return null;
+      if (typeof item.image === 'string') return { url: item.image, fallback: false };
+      if (!item.image && item.url && !item.route) return { url: item.url, fallback: true };
+      return null;
+    });
+  if (value?.type === 'compare')
+    return value.columns.map((column) =>
+      typeof column === 'object' && typeof column.image === 'string'
+        ? { url: column.image, fallback: false }
+        : null,
+    );
+  return [];
+}
+
+export function withPictures(
+  value: Presentation,
+  pictures: Array<{ artifactId: string; alt: string } | null | undefined>,
+): Presentation {
+  const place = <T extends { image?: unknown }>(entry: T, index: number) => {
+    const picture = pictures[index];
+    if (picture) return { ...entry, image: picture };
+    if (typeof entry.image !== 'string') return entry;
+    const { image: _, ...rest } = entry;
+    return rest;
+  };
+  if (value.type === 'items') return { ...value, items: value.items.map(place) };
+  if (value.type === 'compare')
+    return {
+      ...value,
+      columns: value.columns.map((column, index) =>
+        typeof column === 'string' ? column : place(column, index),
+      ),
+    };
+  return value;
+}
+
+export const pictureAlt = (value: Presentation, index: number) =>
+  value.type === 'items'
+    ? (value.items[index]?.title ?? 'Picture')
+    : value.type === 'compare'
+      ? compareColumn(value.columns[index] ?? 'Picture').label
+      : 'Picture';
 
 export const bugReportReplyHint =
   'Reply "send" to share this summary with the Nod team, or ignore it. To add a diagnostic report, send it from Nod on your computer.';
@@ -601,7 +707,7 @@ const notWrittenByPi = new Set([
 
 export const presentationInputSchema = z
   .discriminatedUnion('type', [
-    itemsPresentation,
+    itemsInput,
     ...presentationSchema.options.filter(
       (schema) => schema !== itemsPresentation && !notWrittenByPi.has(schema.shape.type.value),
     ),
@@ -790,18 +896,35 @@ export function flightItems(value: FlightsPresentation): ItemsPresentation {
         ...(risks.length ? { warning: clip(risks.join('. '), 300) } : {}),
         facts,
         ...(option.url ? { url: option.url } : {}),
+        ...(carrier(first.flightNumber)
+          ? {
+              image: `https://www.gstatic.com/flights/airline_logos/70px/${carrier(first.flightNumber)}.png`,
+            }
+          : {}),
       };
     }),
   };
 }
+
+const carrier = (flightNumber: string | undefined) =>
+  flightNumber?.match(/^([A-Z0-9]{2})\s?\d/)?.[1];
 
 export function presentationImages(
   value: Presentation,
 ): Array<{ artifactId: string; alt: string }> {
   if (value.type === 'image') return [value];
   if (value.type === 'items')
-    return value.items.flatMap((item) =>
-      item.image && typeof item.image === 'object' ? [item.image] : [],
+    return [
+      ...value.items.flatMap((item) =>
+        item.image && typeof item.image === 'object' ? [item.image] : [],
+      ),
+      ...(value.map?.tiles ?? []),
+    ];
+  if (value.type === 'compare')
+    return value.columns.flatMap((column) =>
+      typeof column === 'object' && column.image && typeof column.image === 'object'
+        ? [column.image]
+        : [],
     );
   if (value.type === 'booking')
     return [value, ...(value.alternatives ?? [])].flatMap((venue) => venue.photos ?? []);

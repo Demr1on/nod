@@ -2547,6 +2547,7 @@ async function initializeApplication(
       writeArtifact: workspace.writeArtifact.bind(workspace),
       readArtifact: workspace.readArtifact.bind(workspace),
       cardImage: previews?.image ? (url) => previews.image!(url) : undefined,
+      mapTile: previews?.mapTile ? (zoom, x, y) => previews.mapTile!(zoom, x, y) : undefined,
       mailCheck,
       executeConfirmation: approvals.executeConfirmed,
       stoppedOutcomes: approvals.stoppedOutcomes,

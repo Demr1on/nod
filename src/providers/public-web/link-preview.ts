@@ -252,6 +252,22 @@ export function createPublicLinkPreviewProvider(
         return null;
       }
     },
+    async mapTile(zoom, x, y) {
+      const signal = AbortSignal.timeout(Math.min(6000, options.timeoutMs ?? 6000));
+      const tiles = 2 ** zoom;
+      try {
+        const tile = await fetchPublic(
+          `https://tile.openstreetmap.org/${zoom}/${((x % tiles) + tiles) % tiles}/${y}.png`,
+          512 * 1024,
+          false,
+          signal,
+        );
+        const mimeType = rasterImageType(tile.body);
+        return mimeType ? { bytes: tile.body, mimeType } : null;
+      } catch {
+        return null;
+      }
+    },
     async icon(origin) {
       const signal = AbortSignal.timeout(Math.min(8000, options.timeoutMs ?? 8000));
       const fetchIcon = async (url: string): Promise<SiteIcon | null> => {

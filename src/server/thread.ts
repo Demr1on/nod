@@ -1,9 +1,13 @@
 import {
+  mapFrame,
+  pictureAlt,
+  pictureSlots,
   presentationImages,
   presentationSchema,
   presentationText,
   type Presentation,
   type ScheduleRunPresentation,
+  withPictures,
 } from '../shared/presentation.ts';
 import {
   answerChoicesSchema,
@@ -104,13 +108,9 @@ async function cardPictures(
   presentation: Presentation | undefined,
   fetchImage: ((url: string) => Promise<PreviewImage | null>) | undefined,
 ): Promise<Array<PreviewImage | null>> {
-  if (presentation?.type !== 'items' || !fetchImage) return [];
-  const wanted = presentation.items.map((item, index) => {
-    if (index >= 8) return null;
-    if (typeof item.image === 'string') return { url: item.image, fallback: false };
-    if (!item.image && item.url) return { url: item.url, fallback: true };
-    return null;
-  });
+  if (!fetchImage) return [];
+  const wanted = pictureSlots(presentation);
+  if (!wanted.some(Boolean)) return [];
   const deadline = new Promise<null>((resolve) => setTimeout(resolve, 5000, null).unref());
   const fetched = await Promise.all(
     wanted.map((want) =>
@@ -127,6 +127,31 @@ async function cardPictures(
       ? picture
       : null,
   );
+}
+
+async function cardMap(
+  presentation: Presentation | undefined,
+  fetchTile: ((zoom: number, x: number, y: number) => Promise<PreviewImage | null>) | undefined,
+) {
+  if (presentation?.type !== 'items' || !fetchTile || presentation.items.length < 2) return null;
+  const locations = presentation.items.map((item) => item.location);
+  if (!locations.every((location) => location)) return null;
+  const frame = mapFrame(locations as Array<NonNullable<(typeof locations)[number]>>);
+  if (!frame) return null;
+  const deadline = new Promise<null>((resolve) => setTimeout(resolve, 5000, null).unref());
+  const tiles = await Promise.all(
+    Array.from({ length: frame.columns * frame.rows }, (_, index) =>
+      Promise.race([
+        fetchTile(
+          frame.zoom,
+          frame.x + (index % frame.columns),
+          frame.y + Math.floor(index / frame.columns),
+        ).catch(() => null),
+        deadline,
+      ]),
+    ),
+  );
+  return tiles.every((tile) => tile) ? { frame, tiles: tiles as PreviewImage[] } : null;
 }
 
 const running = new Map<string, AbortController>();
@@ -250,6 +275,7 @@ export interface ThreadDependencies {
   ) => Promise<void>;
   readArtifact?: (threadId: string, path: string, maxBytes: number) => Promise<Uint8Array>;
   cardImage?: (url: string) => Promise<PreviewImage | null>;
+  mapTile?: (zoom: number, x: number, y: number) => Promise<PreviewImage | null>;
   mailCheck?: MailCheck;
   executeConfirmation?: (
     turnId: string,
@@ -2419,36 +2445,61 @@ async function executeTurn(turn: any, dependencies: ThreadDependencies) {
     const created = new Map<string, Artifact>();
     const cleanup: Array<() => Promise<void>> = [];
     let rolledBack = false;
-    const pictures = await cardPictures(presentation, dependencies.cardImage);
+    const [pictures, map] = await Promise.all([
+      cardPictures(presentation, dependencies.cardImage),
+      cardMap(presentation, dependencies.mapTile),
+    ]);
     try {
       const id = await current(async (client) => {
         afterRollback(client, () => {
           rolledBack = true;
         });
-        if (presentation?.type === 'items') {
-          const items = [];
-          for (const [index, item] of presentation.items.entries()) {
-            const picture = pictures[index];
-            if (typeof item.image !== 'string' && !picture) {
-              items.push(item);
-              continue;
-            }
-            const { image: _, ...rest } = item;
+        if (presentation) {
+          const stored = [];
+          for (const [index, picture] of pictures.entries()) {
             if (!picture) {
-              items.push(rest);
+              stored.push(null);
               continue;
             }
-            const stored = await artifacts.storeArtifact(
+            const alt = pictureAlt(presentation, index);
+            const artifact = await artifacts.storeArtifact(
               Buffer.from(picture.bytes),
-              `${item.title}.${picture.mimeType.split('/')[1]}`,
+              `${alt}.${picture.mimeType.split('/')[1]}`,
               picture.mimeType,
               threadId,
               client,
               (remove) => cleanup.push(remove),
             );
-            items.push({ ...rest, image: { artifactId: stored.id, alt: item.title } });
+            stored.push({ artifactId: artifact.id, alt });
           }
-          presentation = { ...presentation, items };
+          presentation = withPictures(presentation, stored);
+        }
+        if (presentation?.type === 'items') {
+          const { map: _map, ...card } = presentation;
+          const tiles = [];
+          for (const [index, tile] of (map?.tiles ?? []).entries()) {
+            const stored = await artifacts.storeArtifact(
+              Buffer.from(tile.bytes),
+              `map-tile-${index + 1}.${tile.mimeType.split('/')[1]}`,
+              tile.mimeType,
+              threadId,
+              client,
+              (remove) => cleanup.push(remove),
+            );
+            tiles.push({ artifactId: stored.id, alt: 'Map tile' });
+          }
+          presentation = {
+            ...card,
+            ...(map && {
+              map: {
+                zoom: map.frame.zoom,
+                x: map.frame.x,
+                y: map.frame.y,
+                columns: map.frame.columns,
+                tiles,
+              },
+            }),
+          };
         }
         const files = new Map(attachments.map((file) => [file.id, file]));
         const references = replyFileReferences(text);

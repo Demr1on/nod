@@ -1,5 +1,11 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import { compareColumn, mapLocationUrl, type Presentation } from '../../shared/presentation';
+import {
+  compareColumn,
+  mapLocationUrl,
+  mapPoint,
+  mapTileSize,
+  type Presentation,
+} from '../../shared/presentation';
 import { AlertCircle, Check, ChevronDown, ExternalLink } from './icons';
 
 export interface CardPick {
@@ -81,17 +87,22 @@ function Picture({
   item,
   className,
   keepSpace,
+  logo,
 }: {
-  item: Item;
+  item: { image?: Item['image'] };
   className: string;
   keepSpace?: boolean;
+  logo?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
   if (!item.image || typeof item.image !== 'object' || failed)
-    return keepSpace ? <span className={className} aria-hidden="true" /> : null;
+    return keepSpace ? (
+      <span className={className} data-logo={logo || undefined} aria-hidden="true" />
+    ) : null;
   return (
     <img
       className={className}
+      data-logo={logo || undefined}
       src={`/api/artifacts/${item.image.artifactId}`}
       alt={item.image.alt}
       loading="lazy"
@@ -105,20 +116,27 @@ const pictured = (item: Item) => Boolean(item.image && typeof item.image === 'ob
 
 function Tiles({ visual }: { visual: Visual<'items'> }) {
   const pick = useContext(CardPickContext);
+  const located = visual.items.every((item) => item.location) ? (visual.items as Located[]) : null;
+  const [selected, setSelected] = useState(0);
+  const gallery = visual.items.some(pictured);
   return (
     <div className="card-band">
+      {located && (
+        <Pins items={located} map={visual.map} selected={selected} onSelect={setSelected} />
+      )}
       <ul
         className="card-tiles"
         data-settled={(pick && pick.chosen.length > 0) || undefined}
         data-count={visual.items.length % 3 === 0 || visual.items.length === 5 ? 3 : 2}
+        data-pictured={gallery || undefined}
       >
         {visual.items.map((item, index) => {
           const link = item.url ?? (item.location && mapLocationUrl(item.location));
           const body = (
             <>
-              <Picture item={item} className="card-tile-image" />
+              <Picture item={item} className="card-tile-image" keepSpace={gallery} />
               <span className="card-tile-top">
-                {visual.ranked && <span className="card-rank">{index + 1}</span>}
+                {(visual.ranked || located) && <span className="card-rank">{index + 1}</span>}
                 {item.badge && <span className="card-badge">{item.badge}</span>}
                 {pick && (
                   <span className="card-radio" data-on={pick.chosen.includes(index) || undefined}>
@@ -143,6 +161,8 @@ function Tiles({ visual }: { visual: Visual<'items'> }) {
               key={index}
               data-badge={item.badge ? true : undefined}
               data-chosen={pick?.chosen.includes(index) || undefined}
+              data-selected={(located && selected === index) || undefined}
+              onPointerEnter={located ? () => setSelected(index) : undefined}
             >
               {pick ? (
                 <Choosable index={index} className="card-tile" pick={pick}>
@@ -181,9 +201,9 @@ export function Items({ visual }: { visual: Visual<'items'> }) {
       (item.detail?.length ?? 0) <= 160 &&
       !item.facts?.length,
   );
-  const gallery = visual.items.every(
-    (item) => pictured(item) && !item.status && !item.route && !item.facts?.length,
-  );
+  const gallery =
+    visual.items.filter(pictured).length >= Math.max(2, count - 1) &&
+    visual.items.every((item) => !item.status && !item.route && !item.facts?.length);
   if (
     visual.layout !== 'list' &&
     count > 1 &&
@@ -209,11 +229,12 @@ function List({ visual }: { visual: Visual<'items'> }) {
     <div className="card-band">
       {visual.label && <p className="card-label">{visual.label}</p>}
       {located && located.length > 1 && (
-        <Pins items={located} selected={selected} onSelect={setSelected} />
+        <Pins items={located} map={visual.map} selected={selected} onSelect={setSelected} />
       )}
       <ul
         className="card-items"
         data-gutter={gutter}
+        data-pictured={pictured || undefined}
         data-settled={(pick && pick.chosen.length > 0) || undefined}
       >
         {visual.items.map((item, index) => {
@@ -231,7 +252,12 @@ function List({ visual }: { visual: Visual<'items'> }) {
                 <span className="card-dot" data-tone={item.status?.tone ?? 'none'} />
               )}
               {gutter === 'index' && <span className="card-index">{index + 1}</span>}
-              <Picture item={item} className="card-thumb" keepSpace={pictured} />
+              <Picture
+                item={item}
+                className="card-thumb"
+                keepSpace={pictured}
+                logo={Boolean(item.route)}
+              />
               <span className="card-main">
                 {item.route ? (
                   <RouteLine item={item} usualDate={usualDate} />
@@ -395,13 +421,67 @@ function RouteLine({ item, usualDate }: { item: Item; usualDate?: string }) {
 
 function Pins({
   items,
+  map,
   selected,
   onSelect,
 }: {
   items: Located[];
+  map?: Visual<'items'>['map'];
   selected: number;
   onSelect: (index: number) => void;
 }) {
+  const [broken, setBroken] = useState(false);
+  if (map && !broken) {
+    const rows = Math.ceil(map.tiles.length / map.columns);
+    const width = map.columns * mapTileSize;
+    const height = rows * mapTileSize;
+    return (
+      <div className="card-map" style={{ aspectRatio: `${width} / ${height}` }}>
+        <div
+          className="card-map-tiles"
+          style={{ gridTemplateColumns: `repeat(${map.columns}, 1fr)` }}
+        >
+          {map.tiles.map((tile) => (
+            <img
+              key={tile.artifactId}
+              src={`/api/artifacts/${tile.artifactId}`}
+              alt=""
+              draggable={false}
+              onError={() => setBroken(true)}
+            />
+          ))}
+        </div>
+        {items.map((item, index) => {
+          const point = mapPoint(item.location, map.zoom);
+          return (
+            <button
+              key={index}
+              type="button"
+              className="card-map-pin"
+              aria-label={`Show ${item.title}`}
+              aria-pressed={selected === index}
+              style={{
+                left: `${((point.x - map.x * mapTileSize) / width) * 100}%`,
+                top: `${((point.y - map.y * mapTileSize) / height) * 100}%`,
+              }}
+              onClick={() => onSelect(index)}
+            >
+              {index + 1}
+            </button>
+          );
+        })}
+        <a
+          className="card-map-credit"
+          href="https://www.openstreetmap.org/copyright"
+          target="_blank"
+          rel="noopener noreferrer"
+          referrerPolicy="no-referrer"
+        >
+          © OpenStreetMap
+        </a>
+      </div>
+    );
+  }
   const lat = items.map((item) => item.location.latitude);
   const lon = items.map((item) => item.location.longitude);
   const midLat = (Math.min(...lat) + Math.max(...lat)) / 2;
@@ -550,6 +630,11 @@ export function Compare({ visual }: { visual: Visual<'compare'> }) {
                     data-chosen={pick?.chosen.includes(index) || undefined}
                   >
                     <span className="card-contender">
+                      <Picture
+                        item={column}
+                        className="card-contender-image"
+                        keepSpace={columns.some((other) => other.image)}
+                      />
                       <span className="card-title">{column.label}</span>
                       {column.sub && <span className="card-sub">{column.sub}</span>}
                       {winner === index && <span className="card-pick">Pick</span>}
