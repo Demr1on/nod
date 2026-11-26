@@ -178,6 +178,14 @@ a svg {
 .input:disabled {
   opacity: 0.55;
 }
+select.input {
+  appearance: none;
+  padding-right: 40px;
+  background-image: var(--select-chevron);
+  background-position: right 14px center;
+  background-repeat: no-repeat;
+  background-size: 16px;
+}
 .select-trigger {
   display: inline-flex;
   align-items: center;

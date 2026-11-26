@@ -33,6 +33,7 @@
   --foreground: var(--black);
   --text-secondary: var(--gray-80);
   --muted-foreground: var(--gray-70);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23676767' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --placeholder: var(--muted-foreground);
   --accent: var(--pink-70);
   --accent-soft: var(--pink-10);
@@ -136,6 +137,7 @@
   --foreground: var(--white);
   --text-secondary: var(--gray-30);
   --muted-foreground: var(--gray-40);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23bfbfbf' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --accent: var(--brand-pink);
   --accent-soft: var(--pink-80);
   --accent-border: var(--pink-70);

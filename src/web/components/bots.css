@@ -507,22 +507,20 @@
   outline: none;
   box-shadow: none;
 }
-.panel-select {
+.input.panel-select {
   margin-left: auto;
   width: auto;
   max-width: 65%;
+  min-height: 32px;
   height: 32px;
-  padding: 0 8px;
-  border: 1px solid var(--border);
+  padding: 0 32px 0 10px;
+  border-color: var(--border);
   border-radius: 8px;
-  background: var(--surface);
+  background-color: var(--surface);
+  background-position: right 10px center;
+  background-size: 14px;
   color: var(--muted-foreground);
-  font: inherit;
   font-size: 13px;
-}
-.panel-select:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
 }
 .panel-identity-text p {
   margin: 2px 0 0;
