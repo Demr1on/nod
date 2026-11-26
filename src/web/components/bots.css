@@ -230,6 +230,7 @@
 }
 .bot-foot-item {
   display: flex;
+  text-decoration: none;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -504,6 +505,24 @@
 .panel-role:focus {
   background: var(--surface-inset);
   outline: none;
+  box-shadow: none;
+}
+.panel-select {
+  margin-left: auto;
+  width: auto;
+  max-width: 65%;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: 13px;
+}
+.panel-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .panel-identity-text p {
   margin: 2px 0 0;
@@ -1050,6 +1069,7 @@ button.panel-row-head {
 }
 .new-bot-dialog {
   width: min(400px, calc(100vw - 32px));
+  overflow: visible;
 }
 .new-bot-dialog form {
   display: flex;
@@ -1067,15 +1087,6 @@ button.panel-row-head {
 }
 .new-bot-dialog form > .button {
   align-self: flex-end;
-}
-.avatar-menu-inline {
-  position: static;
-  width: auto;
-  padding: 0;
-  border: 0;
-  background: none;
-  box-shadow: none;
-  animation: none;
 }
 .av-changed {
   animation: bot-pop 220ms var(--ease-enter);

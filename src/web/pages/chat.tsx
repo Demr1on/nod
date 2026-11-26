@@ -424,6 +424,10 @@ export function Chat({
   const audioPreviews = useRef(new Map<string, string>());
   const [stopping, setStopping] = useState(false);
   const composer = useRef<ComposerHandle>(null);
+  const emptyChat = Boolean(chat) && state.messages.length === 0;
+  useEffect(() => {
+    if (emptyChat) requestAnimationFrame(() => composer.current?.focus());
+  }, [chat?.id, emptyChat]);
   const sendQueue = useRef(Promise.resolve(true));
   const sendCount = useRef(0);
   const pendingSends = useRef(0);

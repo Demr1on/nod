@@ -26,13 +26,7 @@ import { PageHeader } from './components/page-title';
 import { DesktopUpdateToast } from './components/desktop-update-toast';
 import { FeedbackDialog } from './components/feedback';
 import { createFeedbackCapture } from './lib/feedback-capture';
-import {
-  navigate,
-  replaceNavigation,
-  sidebarItems,
-  sidebarSection,
-  subscribeNavigation,
-} from './lib/navigation';
+import { navigate, replaceNavigation, sidebarItems, subscribeNavigation } from './lib/navigation';
 import { appPagePath, preparedWorkId } from '../shared/app-links';
 import { BrowserWindow } from './pages/browser';
 import { readUiPreference, writeUiPreference } from './lib/ui-preferences';
@@ -145,13 +139,13 @@ function Workspace({
   const [panelOpen, setPanelOpen] = useState(false);
   const bots = state?.bots ?? [];
   const openBot = bots.find((bot) => bot.id === openBotId);
-  const inSettings = sidebarSection(path) === 'settings' || sidebarSection(path) === 'scheduled';
+  const inSettings = path.startsWith('/settings');
   useEffect(() => {
     const changed = () => void refresh();
     window.addEventListener('nod:bots-changed', changed);
     return () => window.removeEventListener('nod:bots-changed', changed);
   }, [refresh]);
-  const lastSettings = useRef('/tasks');
+  const lastSettings = useRef('/settings');
   if (inSettings) lastSettings.current = path;
   const botTurns = new Set(
     (state?.activity ?? []).filter((item) => item.botId).map((item) => item.turnId),
@@ -263,6 +257,7 @@ function Workspace({
             nodLine={nodLine}
             nodWorking={nodWorking}
             nodUnread={path !== '/' && (unread.count > 0 || unread.pending)}
+            path={path}
             settingsActive={inSettings}
             unread={(bot) => chatUnread(bot, chatCursors)}
             onNavigate={navigate}

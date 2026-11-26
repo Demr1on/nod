@@ -16,6 +16,8 @@ import { botActivity, botLine, botPath, type Bot } from '../lib/bots';
 import { LockKeyhole, Plus, Settings, X } from './icons';
 import { NodModelName, BotModel } from './model-choices';
 import { NodAvatar, BotAvatar } from './bot-avatar';
+import { LiveLine } from './live-line';
+import { sidebarItems } from '../lib/navigation';
 import { Button, Dialog, DialogContent, DialogTitle, Input, Loading, Notice } from './ui';
 import { EmojiCatalog } from './emoji-picker';
 
@@ -179,6 +181,7 @@ export function BotNav({
   nodLine,
   nodUnread,
   nodWorking,
+  path,
   settingsActive,
   unread,
   onNavigate,
@@ -192,6 +195,7 @@ export function BotNav({
   nodLine: string;
   nodUnread: boolean;
   nodWorking: boolean;
+  path: string;
   settingsActive: boolean;
   unread(bot: Bot): boolean;
   onNavigate(path: string): void;
@@ -238,7 +242,14 @@ export function BotNav({
         <span className="bot-meta">
           <span className="bot-name">Nod</span>
           <span className={`bot-sub${nodUnread ? ' bot-sub-unread' : ''}`}>
-            {nodWorking ? 'Working…' : nodLine || 'Ask me anything'}
+            {nodWorking ? (
+              <LiveLine
+                item={activity?.find((item) => !item.botId && !item.background)}
+                history={false}
+              />
+            ) : (
+              nodLine || 'Ask me anything'
+            )}
           </span>
         </span>
         {nodUnread ? (
@@ -294,10 +305,10 @@ export function BotNav({
                     <span className="bot-meta">
                       <span className="bot-name">{bot.name}</span>
                       <span className={`bot-sub${isUnread ? ' bot-sub-unread' : ''}`}>
-                        {botLine(
-                          bot,
-                          bot.status === 'working' && !(live?.step ?? live?.title),
-                          live,
+                        {bot.status === 'working' ? (
+                          <LiveLine item={live} history={false} />
+                        ) : (
+                          botLine(bot)
                         )}
                       </span>
                     </span>
@@ -317,6 +328,20 @@ export function BotNav({
         )}
       </div>
       <div className="bot-foot">
+        {sidebarItems
+          .filter((item) => item.path !== '/')
+          .map((item) => (
+            <a
+              key={item.path}
+              href={item.path}
+              className="bot-foot-item"
+              aria-current={path === item.path ? 'page' : undefined}
+              onClick={link(item.path)}
+            >
+              <item.icon size={16} aria-hidden="true" />
+              <span>{item.label}</span>
+            </a>
+          ))}
         <button
           type="button"
           className="bot-foot-item"
@@ -429,7 +454,7 @@ function AvatarMenu({
   onClose,
 }: {
   onPick(next: string): Promise<unknown> | void;
-  onClose?(): void;
+  onClose(): void;
 }) {
   const [tab, setTab] = useState<'emoji' | 'upload'>('emoji');
   const [busy, setBusy] = useState(false);
@@ -442,11 +467,7 @@ function AvatarMenu({
       .finally(() => setBusy(false));
   };
   return (
-    <div
-      className={onClose ? 'avatar-menu' : 'avatar-menu avatar-menu-inline'}
-      role={onClose ? 'dialog' : 'group'}
-      aria-label={onClose ? 'Change avatar' : 'Avatar'}
-    >
+    <div className="avatar-menu" role="dialog" aria-label="Change avatar">
       <div className="avatar-tabs" role="tablist">
         {(
           [
@@ -491,11 +512,9 @@ function AvatarMenu({
           <span className="avatar-hint">PNG or JPG, square works best.</span>
         </div>
       )}
-      {onClose && (
-        <button type="button" className="sr-only" onClick={onClose}>
-          Close
-        </button>
-      )}
+      <button type="button" className="sr-only" onClick={onClose}>
+        Close
+      </button>
     </div>
   );
 }
@@ -552,6 +571,7 @@ export function NewBotDialog({ bots, onCreated }: { bots: Bot[]; onCreated(bot: 
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const taken = useRef(bots);
+  const createdBot = useRef(false);
   taken.current = bots;
   useEffect(() => {
     const show = () => {
@@ -560,6 +580,7 @@ export function NewBotDialog({ bots, onCreated }: { bots: Bot[]; onCreated(bot: 
       setAvatar(choices[Math.floor(Math.random() * choices.length)]!);
       setName('');
       setError('');
+      createdBot.current = false;
       setOpen(true);
     };
     window.addEventListener('nod:new-bot', show);
@@ -576,6 +597,7 @@ export function NewBotDialog({ bots, onCreated }: { bots: Bot[]; onCreated(bot: 
         body: JSON.stringify({ name, avatar }),
       });
       botsChanged();
+      createdBot.current = true;
       setOpen(false);
       onCreated(created);
     } catch (cause) {
@@ -586,7 +608,13 @@ export function NewBotDialog({ bots, onCreated }: { bots: Bot[]; onCreated(bot: 
   }
   return (
     <Dialog open={open} onOpenChange={(next) => !busy && setOpen(next)}>
-      <DialogContent className="new-bot-dialog" aria-describedby={undefined}>
+      <DialogContent
+        className="new-bot-dialog"
+        aria-describedby={undefined}
+        onCloseAutoFocus={(event) => {
+          if (createdBot.current) event.preventDefault();
+        }}
+      >
         <DialogTitle>New bot</DialogTitle>
         <form
           autoComplete="off"
@@ -596,7 +624,7 @@ export function NewBotDialog({ bots, onCreated }: { bots: Bot[]; onCreated(bot: 
           }}
         >
           <div className="new-bot-identity">
-            <BotAvatar name={name.trim() || 'A'} avatar={avatar} size="lg" />
+            <AvatarField name={name.trim() || 'A'} avatar={avatar} onPick={setAvatar} />
             <Input
               autoFocus
               aria-label="Name"
@@ -610,7 +638,6 @@ export function NewBotDialog({ bots, onCreated }: { bots: Bot[]; onCreated(bot: 
               }}
             />
           </div>
-          <AvatarMenu onPick={setAvatar} />
           {error && <Notice kind="error">{error}</Notice>}
           <Button type="submit" disabled={busy || !name.trim()}>
             {busy ? 'Creating…' : 'Create'}
@@ -760,12 +787,6 @@ export function BotPanel({ bot, onClose }: { bot?: Bot; onClose(): void }) {
                   <span>Model</span>
                   <BotModel bot={bot} onError={toast} />
                 </label>
-              </div>
-              <div className="panel-row">
-                <div className="panel-row-head panel-row-still">
-                  <span>Memory</span>
-                  <span className="panel-row-value">Its own</span>
-                </div>
               </div>
               <div className="panel-row">
                 <div className="panel-row-head panel-row-still">

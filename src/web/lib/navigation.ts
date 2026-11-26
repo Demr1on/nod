@@ -9,16 +9,6 @@ export const sidebarItems = [
   { path: '/vault', label: 'Vault', key: '6', icon: Vault },
 ] as const;
 
-export type SidebarSection = 'chat' | 'scheduled' | 'settings';
-
-export function sidebarSection(path: string): SidebarSection | undefined {
-  if (path === '/tasks') return 'scheduled';
-  if (['/apps', '/channels', '/usage', '/vault'].includes(path) || path.startsWith('/settings'))
-    return 'settings';
-  if (path === '/' || path.startsWith('/bot/') || path.startsWith('/prepared/')) return 'chat';
-  return undefined;
-}
-
 type NavigationGuard = (path: string, proceed: () => void) => boolean;
 let navigationGuard: NavigationGuard | null = null;
 let committedNavigation = false;

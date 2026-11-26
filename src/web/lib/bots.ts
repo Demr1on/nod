@@ -39,11 +39,8 @@ export function botActivity(activity: Activity[] | undefined, id: string) {
   return activity?.find((item) => item.botId === id);
 }
 
-export function botLine(bot: Bot, writing: boolean, live?: Activity) {
-  if (writing) return 'Writing…';
+export function botLine(bot: Bot) {
   if (bot.status === 'needs_you' && bot.question) return `Needs you: ${plainText(bot.question)}`;
-  const now = live?.step ?? live?.title;
-  if (bot.status === 'working' && now) return now;
   const last = bot.lastMessage;
   if (!last) return bot.job || 'No messages yet';
   return last.from === 'owner' ? `You: ${plainText(last.text)}` : plainText(last.text);
