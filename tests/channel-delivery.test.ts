@@ -4854,11 +4854,11 @@ test(
         );
         return id;
       };
-      const ask = async (text: string, seconds: number) => {
+      const ask = async (text: string, seconds: number, bot: string | null = null) => {
         const turn = await webTurn('waiting', 'question');
         await pool.query(
-          `INSERT INTO messages(id,owner_id,role,text,thread_id,turn_id,answer_choices,created_at)
-           VALUES($1,'local-development','assistant',$2,$3,$4,$5,now()+make_interval(secs=>$6))`,
+          `INSERT INTO messages(id,owner_id,role,text,thread_id,turn_id,answer_choices,created_at,bot_id)
+           VALUES($1,'local-development','assistant',$2,$3,$4,$5,now()+make_interval(secs=>$6),$7)`,
           [
             randomUUID(),
             text,
@@ -4872,14 +4872,25 @@ test(
               multiple: false,
             }),
             seconds,
+            bot,
           ],
         );
       };
+      const penny = randomUUID();
       await reply(await webTurn('running'), 'Reading the synthetic folder.', randomUUID(), 1);
       await ask('Shall I read the synthetic document?', 2);
       await channels.drain();
       assert.ok(sent.some((text) => text.includes('Shall I read the synthetic document?')));
       assert.ok(!sent.some((text) => text.includes('Reading the synthetic folder.')));
+      await ask('Shall Penny pay the synthetic bill?', 2.5, penny);
+      await pool.query(
+        `INSERT INTO messages(id,owner_id,role,text,thread_id,turn_id,bot_id,created_at)
+         SELECT $1,'local-development','assistant','Penny found the synthetic bill.',$2,turn_id,$3,
+           now()+interval '2.5 seconds' FROM channel_inbox`,
+        [randomUUID(), threadId, penny],
+      );
+      await channels.drain();
+      assert.ok(!sent.some((text) => text.includes('Penny')));
       const back = await webTurn('succeeded');
       await pool.query(
         `INSERT INTO messages(id,owner_id,role,text,thread_id,turn_id,created_at)
