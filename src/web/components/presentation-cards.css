@@ -72,7 +72,15 @@
 .card-pick-write:focus-visible {
   border-color: var(--ring);
 }
+.card-pick-closed {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
 .card-pick-send .choice-card-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   flex: 0 1 auto;
   max-width: 60%;
   overflow: hidden;
@@ -701,6 +709,7 @@ a.card-row {
 .card-facts dd {
   min-width: 0;
   margin: 0;
+  overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
 .card-facts > div[data-strong] :is(dt, dd) {
@@ -932,4 +941,26 @@ button.card-contender {
   .message-presentation button.card-contender:not([aria-disabled]):hover {
     border-color: var(--gray-50);
   }
+}
+.card-draft-head strong {
+  overflow-wrap: anywhere;
+}
+.card-band.card-draft-body {
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+.card-draft-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-decoration: none;
+}
+.card-draft-open:hover {
+  color: var(--foreground);
 }

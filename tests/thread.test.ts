@@ -3090,6 +3090,7 @@ test(
               for (const message of messages)
                 await context.reply(`Answered: ${message.text}`, undefined, message.id);
             }
+            await context.reply('Synthetic summary');
             return { status: 'succeeded' };
           };
           try {
@@ -3127,6 +3128,7 @@ test(
             assert.deepEqual(answers, [
               { text: 'Answered: What is the first synthetic result?', reply: first.messageId },
               { text: 'Answered: What is the second synthetic result?', reply: second.messageId },
+              { text: 'Synthetic summary', reply: null },
             ]);
           } finally {
             release(prompt);

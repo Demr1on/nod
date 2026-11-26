@@ -9,6 +9,7 @@ import {
   CardNote,
   CardPickSend,
   Compare,
+  Draft,
   FactList,
   Items,
   Schedule,
@@ -98,6 +99,7 @@ export function MessagePresentation({
       {visual.type === 'schedule' && <Schedule visual={visual} />}
       {visual.type === 'facts' && <FactList visual={visual} />}
       {visual.type === 'compare' && <Compare visual={visual} />}
+      {visual.type === 'draft' && <Draft visual={visual} />}
       {'note' in visual && <CardNote note={visual.note} />}
       {(visual.type === 'items' || visual.type === 'compare') && <CardPickSend />}
       {visual.type !== 'flights' && (visual.asOf || visual.sources.length > 0) && (

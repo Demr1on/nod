@@ -440,6 +440,27 @@ const comparePresentation = z.strictObject({
     .optional(),
 });
 
+const appLink = text(2048).refine(
+  (value) => value.startsWith('https://') && Boolean(previewableUrl(value)),
+  { message: 'Use an HTTPS link to the draft in its app.' },
+);
+const draftPresentation = z.strictObject({
+  ...common,
+  type: z.literal('draft'),
+  status: z
+    .enum(['draft', 'sent', 'scheduled'])
+    .describe('draft until it has really been sent or scheduled.'),
+  via: text(40).describe('Where it lives, e.g. Gmail, Outlook, Slack.').optional(),
+  from: text(320).optional(),
+  to: z.array(text(320)).min(1).max(20),
+  cc: z.array(text(320)).min(1).max(20).optional(),
+  subject: text(300).optional(),
+  body: text(8000).describe('The message exactly as written, with line breaks.'),
+  attachments: z.array(text(160)).min(1).max(10).optional(),
+  when: text(80).describe('Sent or scheduled time.').optional(),
+  open: appLink.describe('Link that opens the draft or message in its app.').optional(),
+});
+
 export const compareColumn = (
   column:
     | string
@@ -626,6 +647,7 @@ export const presentationSchema = z
     schedulePresentation,
     factsPresentation,
     comparePresentation,
+    draftPresentation,
     bugReportPresentation,
     scheduleRunPresentation,
   ])
@@ -782,8 +804,11 @@ function pickLabels(value: Presentation) {
   return [];
 }
 
+export const draftSendLabel = 'Send it';
+
 export function presentationChoices(value: Presentation) {
   if (value.type === 'compare') return pickLabels(value);
+  if (value.type === 'draft' && value.status === 'draft') return [{ label: draftSendLabel }];
   if (
     value.type === 'items' &&
     value.items.length >= 2 &&
@@ -1153,6 +1178,28 @@ export function presentationText(value: Presentation) {
       }
       if (venue.url) lines.push(venue.url);
     }
+  }
+  if (value.type === 'draft') {
+    lines.push(
+      [
+        value.status === 'draft'
+          ? 'Draft, not sent'
+          : value.status === 'sent'
+            ? 'Sent'
+            : 'Scheduled',
+        value.via,
+        value.when,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    );
+    if (value.from) lines.push(`From: ${value.from}`);
+    lines.push(`To: ${value.to.join(', ')}`);
+    if (value.cc) lines.push(`Cc: ${value.cc.join(', ')}`);
+    if (value.subject) lines.push(`Subject: ${value.subject}`);
+    lines.push('', value.body, '');
+    if (value.attachments) lines.push(`Attachments: ${value.attachments.join(', ')}`);
+    if (value.open) lines.push(value.open);
   }
   if (value.type === 'chart') {
     for (const label of [value.xLabel, value.yLabel]) if (label) lines.push(label);

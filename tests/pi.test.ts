@@ -2940,7 +2940,7 @@ test('a turn posts its opening line and final reply, shows the lines between as 
       assert.equal(result.status, 'succeeded');
       assert.deepEqual(posted, replies);
       if (/in chat/.test(prompt))
-        assert.deepEqual(postedTargets, [undefined, steeredId, undefined]);
+        assert.deepEqual(postedTargets, [undefined, undefined, undefined]);
       if (taskContext) assert.ok(postedTargets.every((target) => target === undefined));
       assert.deepEqual(
         events.filter(([type]) => type === 'step').map(([, summary]) => summary),
@@ -3018,10 +3018,10 @@ test('a question waits until a message sent mid-turn has its answer', async (t) 
   assert.deepEqual(posted, [
     ['Drafting the synthetic email.', undefined],
     ['Starting the synthetic task.', undefined],
-    ['It is 391.', steeredId],
+    ['It is 391.', undefined],
   ]);
   assert.equal(result.status, 'waiting_user');
-  assert.equal(result.replyToMessageId, steeredId);
+  assert.equal(result.replyToMessageId, undefined);
 });
 
 test('a question waits until messages queued during the step are read', async (t) => {
@@ -3069,7 +3069,7 @@ test('a question waits until messages queued during the step are read', async (t
   assert.equal(result.status, 'waiting_user');
 });
 
-test("a turn's first answer stays on its own request when a message arrives before it", async (t) => {
+test('a reply quotes only the owner message it names, never a guessed one', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'nod-own-answer-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const steeredId = randomUUID();
@@ -3083,7 +3083,11 @@ test("a turn's first answer stays on its own request when a message arrives befo
           await input.nextMessages!();
           const send = input.tools.find((tool) => tool.name === 'send_message')!;
           await send.execute({ text: 'The synthetic flight leaves at nine.' });
-          await send.execute({ text: 'The synthetic café is next door.' });
+          await send.execute({
+            text: 'The synthetic café is next door.',
+            replyToMessageId: steeredId,
+          });
+          await send.execute({ text: 'Both are booked for the synthetic trip.' });
         },
       }),
       dispose() {},
@@ -3110,6 +3114,7 @@ test("a turn's first answer stays on its own request when a message arrives befo
   assert.deepEqual(posted, [
     ['The synthetic flight leaves at nine.', undefined],
     ['The synthetic café is next door.', steeredId],
+    ['Both are booked for the synthetic trip.', undefined],
   ]);
 });
 
@@ -4142,6 +4147,51 @@ test('send_message validates structured visuals and delivers each distinct prese
     });
     assert.equal(continued, true);
     assert.equal(replies.length, 1);
+    assert.equal(result.status, 'succeeded');
+  });
+
+  await t.test('a delivered card with pick is not refused when messages are queued', async (t) => {
+    const replies: Array<Parameters<RuntimeContext['reply']>> = [];
+    let sent = '';
+    const runtime = createAgentRuntime({
+      agent: {
+        open: async (input) => ({
+          resumed: false,
+          abort() {},
+          dispose() {},
+          prompt: async () => {
+            const send = input.tools.find((tool) => tool.name === 'send_message')!;
+            sent = JSON.stringify(
+              await send.execute({
+                text: 'Synthetic fares.',
+                presentation: {
+                  ...items,
+                  pick: { question: 'Which one?' },
+                  items: [{ title: 'Option 1' }, { title: 'Option 2' }],
+                },
+              }),
+            );
+          },
+        }),
+        dispose() {},
+      },
+      computer: fakeComputer(),
+      workspace: fakeWorkspace(),
+    });
+    t.after(() => runtime.dispose());
+    const result = await runtime.runTurn({
+      ...context(directory),
+      turnId: randomUUID(),
+      prompt: 'Find synthetic fares',
+      hasQueuedMessages: async () => true,
+      takeMessages: async () => [],
+      reply: async (...args) => {
+        replies.push(args);
+      },
+    });
+    assert.equal(replies.length, 1);
+    assert.doesNotMatch(sent, /Not run/);
+    assert.match(sent, /without sending this card again/);
     assert.equal(result.status, 'succeeded');
   });
 });

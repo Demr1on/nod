@@ -313,7 +313,6 @@ export function createAgentRuntime(dependencies: {
     let streamSubmitted = false;
     let speakNext = !context.taskContext;
     let owed: string[] = [];
-    let batchedBurst = false;
     let owedRefused = false;
     let spoke = false;
     let spokeTo: string | null | undefined;
@@ -396,9 +395,10 @@ export function createAgentRuntime(dependencies: {
       );
     };
     let unreadRefused = -1;
+    const unread = async () =>
+      speaks && Boolean(context.hasQueuedMessages) && (await context.hasQueuedMessages!());
     const readFirst = async () => {
-      if (!speaks || unreadRefused === requestRevision || !context.hasQueuedMessages) return;
-      if (!(await context.hasQueuedMessages())) return;
+      if (unreadRefused === requestRevision || !(await unread())) return;
       unreadRefused = requestRevision;
       throw new Error(
         'Not run, and no question was asked: the owner sent new messages you have not read yet. They follow this result; read them, then ask only if you still need to.',
@@ -433,14 +433,16 @@ export function createAgentRuntime(dependencies: {
     const pause: Turn['pause'] = async (reason, message, choices, options) => {
       if (reason === 'question') {
         if (!options?.answered && !splitQuestion(message ?? '').lead) answerFirst(true);
+        if (options?.answered && options.deferred && (await unread())) return false;
         await readFirst();
       }
       if (options?.deferred) {
         deferredPause = { reason, message, choices };
-        return;
+        return true;
       }
       deferredPause = undefined;
       await commitPause(reason, message, choices);
+      return true;
     };
     const confirm = async (result: unknown) => {
       if (!(result && typeof result === 'object' && appConfirmation in result)) return result;
@@ -458,15 +460,15 @@ export function createAgentRuntime(dependencies: {
       }
       bufferedText = '';
     };
-    const queueStreamReply = (text: string, id: string, replyToMessageId?: string | null) => {
+    const queueStreamReply = (text: string, id: string) => {
       streamSubmitted = true;
       if (!context.taskContext) {
         spoke = true;
-        spokeTo = replyToMessageId;
+        spokeTo = undefined;
       }
       pendingReplies = pendingReplies
         .then(async () => {
-          await reply(text, id, replyToMessageId);
+          await reply(text, id);
         })
         .finally(() => {
           if (!persistedStreams.delete(id)) context.delta('', id, true);
@@ -1023,17 +1025,10 @@ export function createAgentRuntime(dependencies: {
         ) => {
           const chat = !context.taskContext && !handoff;
           const first = chat && !spoke;
-          const target =
-            replyToMessageId ??
-            (chat && !first && owed.length === 1
-              ? owed[0]
-              : chat && (owed.length > 1 || batchedBurst)
-                ? null
-                : undefined);
-          const delivery = await reply(text, id, target, presentation, handoff);
+          const delivery = await reply(text, id, replyToMessageId, presentation, handoff);
           if (delivery.delivered && chat) {
             spoke = true;
-            spokeTo = target;
+            spokeTo = replyToMessageId;
           }
           if (delivery.delivered && !handoff)
             owed = replyToMessageId
@@ -1309,7 +1304,6 @@ export function createAgentRuntime(dependencies: {
               context.memoryBrief = undefined;
               checkInSpent = checkInPlan = checkInStrikes = 0;
               owed = [...owed, ...incoming.map((message) => message.id)];
-              if (owed.length > 1) batchedBurst = true;
               owedRefused = false;
             }
             for (const [index, message] of incoming.entries()) {
@@ -1397,21 +1391,7 @@ export function createAgentRuntime(dependencies: {
               (event.status === undefined || event.status === 'succeeded')
             ) {
               if (speakNext || owed.length) {
-                queueStreamReply(
-                  text,
-                  streamId ?? randomUUID(),
-                  context.taskContext
-                    ? undefined
-                    : !spoke
-                      ? batchedBurst
-                        ? null
-                        : undefined
-                      : owed.length === 1
-                        ? owed[0]
-                        : owed.length > 1 || batchedBurst
-                          ? null
-                          : undefined,
-                );
+                queueStreamReply(text, streamId ?? randomUUID());
                 lastNote = '';
                 owed = [];
               } else {
@@ -1450,12 +1430,7 @@ export function createAgentRuntime(dependencies: {
               context.emit('final', '', { execution }).catch(() => {}),
             );
             if (taskStartRevision === requestRevision && !owed.length) streamSubmitted = true;
-            else
-              queueStreamReply(
-                event.text,
-                streamId ?? randomUUID(),
-                !context.taskContext && batchedBurst ? null : undefined,
-              );
+            else queueStreamReply(event.text, streamId ?? randomUUID());
           }
         },
       });
@@ -1561,11 +1536,7 @@ export function createAgentRuntime(dependencies: {
         ...(answer ? { completed: answer } : {}),
         ...(waitingFor ? { waitingFor } : {}),
         ...(waitingMessage ? { message: waitingMessage } : {}),
-        ...(waitingMessage && spokeTo !== undefined
-          ? { replyToMessageId: spokeTo }
-          : waitingMessage && !context.taskContext && batchedBurst
-            ? { replyToMessageId: null }
-            : {}),
+        ...(waitingMessage && spokeTo ? { replyToMessageId: spokeTo } : {}),
         ...(answerChoices ? { answerChoices } : {}),
         ...(handoffBrowserId ? { handoffBrowserId } : {}),
       };

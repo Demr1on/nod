@@ -1,17 +1,19 @@
 import { createContext, Fragment, useContext, useState, type ReactNode } from 'react';
 import {
   compareColumn,
+  draftSendLabel,
   mapLocationUrl,
   mapPoint,
   mapTileSize,
   type Presentation,
 } from '../../shared/presentation';
-import { AlertCircle, Check, ChevronDown, ExternalLink } from './icons';
+import { AlertCircle, Check, ChevronDown, ExternalLink, Send } from './icons';
 
 export interface CardPick {
   chosen: number[];
   disabled: boolean;
   sent: boolean;
+  closed?: boolean;
   label?: string;
   choose(index: number): void;
   send(written?: string): void;
@@ -19,39 +21,76 @@ export interface CardPick {
 
 export const CardPickContext = createContext<CardPick | null>(null);
 
-export function CardPickSend() {
+function useCardPick() {
+  const pick = useContext(CardPickContext);
+  return pick?.closed ? null : pick;
+}
+
+export function CardPickSend({
+  placeholder = 'Something else',
+  action,
+  children,
+}: {
+  placeholder?: string;
+  action?: { label: string; icon?: ReactNode };
+  children?: ReactNode;
+}) {
   const pick = useContext(CardPickContext);
   const [text, setText] = useState('');
-  if (!pick || pick.sent) return null;
+  if (pick?.closed)
+    return (
+      <div className="card-band card-pick-send" data-closed>
+        <p className="card-pick-closed">This choice has closed</p>
+        {children}
+      </div>
+    );
+  const open = pick && !pick.sent;
+  if (!open && !children) return null;
   const written = text.trim();
-  const idle = pick.disabled || (!written && !pick.chosen.length);
+  const idle = !open || pick.disabled || (!written && !action && !pick.chosen.length);
   const send = () => {
-    if (!idle) pick.send(written || undefined);
+    if (!idle) pick.send(written || (pick.chosen.length ? undefined : action?.label));
   };
   return (
     <div className="card-band card-pick-send">
-      <input
-        className="card-pick-write"
-        value={text}
-        maxLength={4000}
-        placeholder="Something else"
-        aria-label="Type your own answer"
-        readOnly={pick.disabled}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
-          event.preventDefault();
-          send();
-        }}
-      />
-      <button
-        type="button"
-        className="choice-card-done"
-        aria-disabled={idle || undefined}
-        onClick={send}
-      >
-        {written ? 'Send' : pick.label ? `Choose ${pick.label}` : 'Choose one'}
-      </button>
+      {open && (
+        <>
+          <input
+            className="card-pick-write"
+            value={text}
+            maxLength={4000}
+            placeholder={placeholder}
+            aria-label={placeholder}
+            readOnly={pick.disabled}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              send();
+            }}
+          />
+          <button
+            type="button"
+            className="choice-card-done"
+            aria-disabled={idle || undefined}
+            onClick={send}
+          >
+            {written ? (
+              'Send'
+            ) : action ? (
+              <>
+                {action.icon}
+                {action.label}
+              </>
+            ) : pick.label ? (
+              `Choose ${pick.label}`
+            ) : (
+              'Choose one'
+            )}
+          </button>
+        </>
+      )}
+      {children}
     </div>
   );
 }
@@ -160,7 +199,7 @@ function Picture({
 const pictured = (item: Item) => Boolean(item.image && typeof item.image === 'object');
 
 function Tiles({ visual }: { visual: Visual<'items'> }) {
-  const pick = useContext(CardPickContext);
+  const pick = useCardPick();
   const located = visual.items.every((item) => item.location) ? (visual.items as Located[]) : null;
   const [selected, setSelected] = useState(0);
   const gallery = visual.items.some(pictured);
@@ -267,7 +306,7 @@ function List({ visual }: { visual: Visual<'items'> }) {
   const located = visual.items.every((item) => item.location) ? (visual.items as Located[]) : null;
   const [open, setOpen] = useState<number | null>(null);
   const [selected, setSelected] = useState(0);
-  const pick = useContext(CardPickContext);
+  const pick = useCardPick();
   const dots = visual.items.some((item) => item.status);
   const pinned = Boolean(located && located.length > 1);
   const gutter = pick ? 'choice' : dots ? 'dot' : pinned || visual.ranked ? 'index' : undefined;
@@ -704,7 +743,7 @@ export function FactList({ visual }: { visual: Visual<'facts'> }) {
 export function Compare({ visual }: { visual: Visual<'compare'> }) {
   const winner = visual.winner;
   const columns = visual.columns.map(compareColumn);
-  const pick = useContext(CardPickContext);
+  const pick = useCardPick();
   return (
     <>
       {visual.verdict && <p className="card-band card-verdict">{visual.verdict}</p>}
@@ -798,6 +837,51 @@ export function Compare({ visual }: { visual: Visual<'compare'> }) {
           </table>
         </div>
       </div>
+    </>
+  );
+}
+
+const draftStatus = { draft: 'Draft · not sent', sent: 'Sent', scheduled: 'Scheduled' } as const;
+
+export function Draft({ visual }: { visual: Visual<'draft'> }) {
+  const people = [
+    ['From', visual.from ? [visual.from] : undefined],
+    ['To', visual.to],
+    ['Cc', visual.cc],
+  ] as const;
+  return (
+    <>
+      <header className="card-head card-draft-head">
+        <strong>{visual.subject || visual.title}</strong>
+        <em className="card-status" data-tone={visual.status === 'draft' ? undefined : 'done'}>
+          {draftStatus[visual.status]}
+          {visual.when ? ` · ${visual.when}` : ''}
+        </em>
+      </header>
+      <div className="card-band">
+        <Facts
+          items={people.flatMap(([label, values]) =>
+            values ? [{ label, value: values.join(', ') }] : [],
+          )}
+        />
+      </div>
+      <div className="card-band card-draft-body">{visual.body}</div>
+      {visual.attachments && (
+        <div className="card-band">
+          <Chips tags={visual.attachments} />
+        </div>
+      )}
+      <CardPickSend
+        placeholder="Ask for a change"
+        action={{ label: draftSendLabel, icon: <Send size={14} aria-hidden="true" /> }}
+      >
+        {visual.open && (
+          <a className="card-draft-open" href={visual.open} target="_blank" rel="noreferrer">
+            Open{visual.via ? ` in ${visual.via}` : ''}
+            <ExternalLink size={14} aria-hidden="true" />
+          </a>
+        )}
+      </CardPickSend>
     </>
   );
 }

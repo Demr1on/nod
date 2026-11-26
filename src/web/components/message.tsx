@@ -423,7 +423,8 @@ export function MessageBubble({
     (message.presentation?.type === 'items' ||
       message.presentation?.type === 'schedule' ||
       message.presentation?.type === 'facts' ||
-      message.presentation?.type === 'compare');
+      message.presentation?.type === 'compare' ||
+      message.presentation?.type === 'draft');
   const cardText = card ? splitQuestion(visibleText) : null;
   const shownText =
     message.role === 'assistant' && message.approval?.fields && message.approval.cardQuestion
@@ -489,6 +490,11 @@ export function MessageBubble({
     ? {
         chosen: answered.length ? answered : picked === null ? [] : [picked],
         sent: answered.length > 0 || Boolean(pickQuestion?.choiceAnswer) || sending,
+        closed:
+          !openChoices.length &&
+          !pickQuestion!.answerChoicesPending &&
+          !pickQuestion!.choiceAnswer &&
+          !sending,
         disabled: openChoices.length
           ? answersDisabled === true
           : !pickQuestion!.answerChoicesPending || !onAnswer || answersDisabled === true,

@@ -601,18 +601,7 @@ export async function insertAssistantMessage(
       });
     attachments = [...attached.values()];
   }
-  if (replyToMessageId === undefined)
-    replyToMessageId =
-      turn.taskMessageId ??
-      (
-        await client.query<{ id: string }>(
-          `SELECT a.id FROM (SELECT id,created_at FROM messages WHERE owner_id=$1 AND thread_id=$2 AND turn_id=$3
-           AND role='user' ORDER BY created_at,id LIMIT 1) a
-         WHERE EXISTS (SELECT 1 FROM messages m WHERE m.owner_id=$1 AND m.thread_id=$2
-           AND (m.created_at,m.id)>(a.created_at,a.id) AND (m.turn_id IS DISTINCT FROM $3 OR m.role='user'))`,
-          [ownerId, turn.threadId, turn.turnId],
-        )
-      ).rows[0]?.id;
+  if (replyToMessageId === undefined) replyToMessageId = turn.taskMessageId ?? null;
   await assertReplyTarget(client, turn.threadId, replyToMessageId ?? undefined);
   const id = randomUUID();
   await client.query(
@@ -2621,7 +2610,6 @@ async function executeTurn(turn: any, dependencies: ThreadDependencies) {
     sourceMessageId = loaded.sourceMessageId;
     if (sourceMessageId) ownerMessageIds.push(sourceMessageId);
     let initialPrompt = String(turn.prompt ?? '');
-    let coalescedBurst = false;
     if (
       burstCoalesceMs > 0 &&
       turn.source === 'user' &&
@@ -2630,7 +2618,6 @@ async function executeTurn(turn: any, dependencies: ThreadDependencies) {
     ) {
       const extra = await takeQueuedMessages(turnId, turn.session_id, turn.channel);
       if (extra.length) {
-        coalescedBurst = true;
         sourceMessageId = extra.at(-1)!.id;
         ownerMessageIds.push(...extra.map((message) => message.id));
         const lines = [initialPrompt, ...extra.map((message) => message.text)].filter((part) =>
@@ -2839,11 +2826,7 @@ async function executeTurn(turn: any, dependencies: ThreadDependencies) {
       emit,
       reply: async (text, streamId, replyToMessageId, presentation, handoff) => {
         const pending = shared.slice();
-        const target =
-          replyToMessageId === undefined && coalescedBurst && !taskContext && !handoff
-            ? null
-            : replyToMessageId;
-        await post(text, pending, streamId, target, presentation, handoff);
+        await post(text, pending, streamId, replyToMessageId, presentation, handoff);
         shared.splice(0, pending.length);
       },
       delta: (text, streamId, done) => {
@@ -3149,9 +3132,7 @@ async function executeTurn(turn: any, dependencies: ThreadDependencies) {
           result.message,
           shared.splice(0),
           undefined,
-          result.replyToMessageId === undefined && coalescedBurst && !taskContext
-            ? null
-            : result.replyToMessageId,
+          result.replyToMessageId,
           undefined,
           answerChoices,
           dependencies.analytics,
