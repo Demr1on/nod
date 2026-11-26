@@ -10,8 +10,17 @@ import {
   type SetStateAction,
 } from 'react';
 import { createPortal, flushSync } from 'react-dom';
-import { ArrowDown, Check, CornerUpLeft, LoaderCircle, Repeat, Route } from '../components/icons';
+import {
+  ArrowDown,
+  Check,
+  CornerUpLeft,
+  ListChecks,
+  LoaderCircle,
+  Repeat,
+  Route,
+} from '../components/icons';
 import { TraceDrawer } from '../components/trace-drawer';
+import { SidePanel, sidePanelOpenByDefault } from '../components/side-panel';
 import { readUiPreference, writeUiPreference } from '../lib/ui-preferences';
 import type {
   Activity,
@@ -363,6 +372,11 @@ export function Chat({
   function toggleTrace(open: boolean) {
     setTraceOpen(open);
     writeUiPreference('nod.trace-open', String(open));
+  }
+  const [sideOpen, setSideOpen] = useState(sidePanelOpenByDefault);
+  function toggleSide(open: boolean) {
+    setSideOpen(open);
+    writeUiPreference('nod.side-open', String(open));
   }
   const { data: connections } = usePageData<Connection[]>('/api/apps');
   const { data: trust, refresh: refreshTrust } = usePageData<TrustView>('/api/trust');
@@ -2222,6 +2236,19 @@ export function Chat({
           </Button>
         </Tooltip>
       )}
+      <Tooltip content={sideOpen ? 'Hide tasks' : 'Show tasks'}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="side-toggle"
+          data-nudge={!sideOpen}
+          aria-label={sideOpen ? 'Hide tasks' : 'Show tasks'}
+          aria-pressed={sideOpen}
+          onClick={() => toggleSide(!sideOpen)}
+        >
+          <ListChecks size={16} />
+        </Button>
+      </Tooltip>
       {onReset && <ResetChat onReset={() => onReset(threadId)} />}
       {onFeedback && (
         <FeedbackLauncher
@@ -2236,7 +2263,22 @@ export function Chat({
       <ArtifactWorkspace
         className="chat-page"
         files={files}
-        aside={tracing && <TraceDrawer changed={state.turns} onClose={() => toggleTrace(false)} />}
+        aside={
+          tracing ? (
+            <TraceDrawer changed={state.turns} onClose={() => toggleTrace(false)} />
+          ) : (
+            sideOpen && (
+              <SidePanel
+                tasks={state.tasks ?? []}
+                activity={state.activity ?? []}
+                connections={connections}
+                disabled={!state.configuration.llmReady || welcoming || spendingPaused}
+                onAsk={(text) => void send(text, [], null, 'task_card')}
+                onClose={() => toggleSide(false)}
+              />
+            )
+          )
+        }
       >
         {toolbarActions || desktopSettingsAvailable() ? (
           <>
