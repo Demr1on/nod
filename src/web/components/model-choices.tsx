@@ -425,7 +425,7 @@ export function BotModel({ bot, onError }: { bot: Bot; onError(message: string):
         model: {
           connectionId: connection.id,
           modelId: model.id,
-          effort: defaultEffort(connection.provider, model),
+          effort: defaultEffort(model),
         } satisfies ModelSelection,
       })),
     );

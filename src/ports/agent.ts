@@ -4,7 +4,7 @@ import type { ProviderUsageEvent } from './provider-usage.ts';
 import type { ExecutionEvent, ExecutionScope } from '../shared/execution.ts';
 import type { ConnectedApp } from './integrations.ts';
 import type { DiscoveredTool } from './discovered.ts';
-import type { BrowserAction, BrowserPage, CredentialKind, WorkspaceSession } from './computer.ts';
+import type { BrowserAction, BrowserPage, WorkspaceSession } from './computer.ts';
 import type {
   AgentReactionResult,
   Artifact,
@@ -47,16 +47,6 @@ export type RuntimeObservation = (
       durationMs: number;
     }
 ) & { execution?: ExecutionScope };
-
-export type BrowserConnectionRequest =
-  | {
-      action: 'connect';
-      url: string;
-      connectionId?: string;
-      label?: string;
-    }
-  | { action: 'use'; url: string; connectionId: string }
-  | { action: 'save'; url: string; connectionId: string; signedIn: true };
 
 export interface BrowserStep {
   step: BrowserAction | { action: 'upload'; selector: string; path: string };
@@ -223,7 +213,6 @@ export interface RuntimeContext {
     query?: string,
     connectionId?: string,
   ): Promise<unknown>;
-  browserConnection?(request: BrowserConnectionRequest): Promise<unknown>;
   browserStep?(
     request: BrowserStep,
   ): Promise<
@@ -250,7 +239,7 @@ export interface RuntimeContext {
       label: string;
     } & (
       | {
-          kind: CredentialKind;
+          kind?: 'otp';
           savedLoginId?: string;
           usernameSelector?: string;
           passwordSelector?: string | string[];
@@ -270,6 +259,7 @@ export interface RuntimeContext {
     args: Record<string, unknown>,
     signal?: AbortSignal,
     admit?: (asks: boolean, read?: boolean) => Promise<void>,
+    nested?: boolean,
   ): Promise<unknown>;
 
   manage(
@@ -356,7 +346,7 @@ export type AgentEvent =
   | { type: 'fallback'; from: string; to: string }
   | { type: 'final'; text: string }
   | ModelUsageObservation
-  | { type: 'error'; message: string; contextExhausted?: boolean };
+  | { type: 'error'; message: string; contextExhausted?: boolean; failure?: ModelFailure };
 export interface AgentAudio {
   id: string;
   mimeType: string;
@@ -413,7 +403,23 @@ export interface Agent {
   open(options: AgentSessionOptions): Promise<AgentSession>;
   dispose(): void | Promise<void>;
 }
-export class ModelRequestError extends Error {}
+export interface ModelFailure {
+  kind:
+    | 'authentication'
+    | 'permission'
+    | 'rate_limited'
+    | 'timeout'
+    | 'unavailable'
+    | 'invalid_request'
+    | 'unknown'
+    | 'tools_unsupported'
+    | 'quota_exhausted'
+    | 'context_too_large';
+  status?: number;
+}
+export class ModelRequestError extends Error {
+  failure?: ModelFailure;
+}
 export class ContextLimitError extends ModelRequestError {}
 export class OutputLimitError extends Error {}
 export class ToolFailureError extends Error {}

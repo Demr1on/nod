@@ -18,6 +18,7 @@ import type {
   AgentToolOutcome,
   AgentToolResult,
   Documentation,
+  ModelFailure,
   RuntimeContext,
   RuntimeObservation,
   RuntimeResult,
@@ -88,7 +89,6 @@ const parentTools = new Set([
   'computer',
   'sign_in',
   'pay',
-  'browser_session',
   'ask_user',
   'send_message',
   'create_audio',
@@ -120,7 +120,8 @@ const admissions = new AsyncLocalStorage<{
   asked: boolean;
   admit(asks: boolean, read?: boolean): Promise<void>;
 }>();
-const browserTools = new Set(['browser', 'browser_session', 'sign_in', 'pay']);
+const nestedCalls = new AsyncLocalStorage<boolean>();
+const browserTools = new Set(['browser', 'sign_in', 'pay']);
 const confirmationNotice = 'The confirmation question is in chat. Wait for the reply.';
 const reportingTools = new Set(['ask_user', 'send_message', 'share_file']);
 const reportingTaskActions = new Set(['finish', 'list', 'stop', 'update']);
@@ -134,7 +135,6 @@ const delimitedTools = new Set([
   'computer',
   'delegate',
   'browser',
-  'browser_session',
   'sign_in',
   'web_search',
   'fetch_content',
@@ -273,6 +273,7 @@ export function createAgentRuntime(dependencies: {
     let stopped = false;
     let modelError: string | undefined;
     let contextExhausted = false;
+    let modelFailure: ModelFailure | undefined;
     let modelIncomplete: 'output' | 'context' | undefined;
     const progress = toolProgress();
     let completed = false;
@@ -590,7 +591,7 @@ export function createAgentRuntime(dependencies: {
           assertActive();
           await context.emit('tool_start', label, event({ command }));
           assertActive();
-          const output = await untilAborted(execute(), signal);
+          const output = await untilAborted(nestedCalls.run(nested, execute), signal);
           signal.throwIfAborted();
           if (name === 'computer') learnComputerApps(params, output);
           if (
@@ -935,6 +936,7 @@ export function createAgentRuntime(dependencies: {
                     await gate?.(asks, read);
                   }
                 : gate,
+              nestedCalls.getStore(),
             );
           },
           manage: async (action: string, args: Record<string, unknown>) => {
@@ -1288,6 +1290,7 @@ export function createAgentRuntime(dependencies: {
           if (event.type === 'error') {
             modelError = event.message;
             contextExhausted = event.contextExhausted === true;
+            modelFailure = event.failure;
           }
           if (event.type === 'final') {
             modelError = undefined;
@@ -1375,8 +1378,11 @@ export function createAgentRuntime(dependencies: {
       const paused = () =>
         `Paused at the ${dollars(context.checkIn!.budgetUsd)} check-in. Reply to keep going.`;
       if (modelError)
-        throw new (contextExhausted ? ContextLimitError : ModelRequestError)(
-          `The model request failed: ${(dependencies.redactError ?? String)(modelError)}`,
+        throw Object.assign(
+          new (contextExhausted ? ContextLimitError : ModelRequestError)(
+            `The model request failed: ${(dependencies.redactError ?? String)(modelError)}`,
+          ),
+          { failure: modelFailure },
         );
       if (modelIncomplete === 'context' && status === 'succeeded')
         throw new ContextLimitError(

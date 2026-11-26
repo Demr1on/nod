@@ -952,6 +952,69 @@ test('mail that grants account access stays out of app tool results and workspac
   );
 });
 
+test('codemode scripts still get sign-in mail withheld from a full app result', async () => {
+  const secrets = ['482913', 'https://example.test/recover?token=fixture-nested-unchecked'];
+  const check: MailCheck = async (emails) =>
+    emails.map((email) => (email.from.includes('broken@example.test') ? undefined : true));
+  const saved: string[] = [];
+  const returned: unknown[] = [];
+  let scriptText = '';
+  await fixture(
+    async (tools) => {
+      const nested = await tools
+        .get('apps')!
+        .execute({ action: 'GMAIL_FETCH_EMAILS', args: {} }, { nested: true });
+      scriptText = nested.content.map((part) => (part.type === 'text' ? part.text : '')).join('');
+    },
+    {
+      integration: async (_action, _args, signal, _admit, nested) => {
+        const value = await inlineAppResult(
+          {
+            data: {
+              messages: [
+                {
+                  messageId: 'code',
+                  sender: 'codes@example.test',
+                  subject: 'Your sign-in code',
+                  preview: `Your code is ${secrets[0]}.`,
+                },
+                {
+                  messageId: 'unchecked',
+                  sender: 'broken@example.test',
+                  subject: 'Recover your account',
+                  preview: `Recover it here: ${secrets[1]}`,
+                },
+              ],
+              unrelated: 'ordinary '.repeat(6000),
+            },
+          },
+          async (text) => {
+            saved.push(text);
+            return 'mail.json';
+          },
+          check,
+          signal,
+          nested,
+        );
+        returned.push(value);
+        return value;
+      },
+    },
+  );
+  const value = returned[0] as {
+    contentWithheld?: { emails: number };
+    data: { messages: Array<Record<string, unknown>>; unrelated: string };
+  };
+  assert.equal(value.data.unrelated, 'ordinary '.repeat(6000));
+  assert.equal(value.contentWithheld?.emails, 1);
+  assert.ok(value.data.messages.every((mail) => !('preview' in mail)));
+  for (const secret of secrets) {
+    assert.ok(!JSON.stringify(value).includes(secret));
+    assert.ok(!scriptText.includes(secret));
+  }
+  assert.deepEqual(saved, []);
+});
+
 test('mail privacy checks retain HTML link destinations without changing ordinary email content', async () => {
   const links = [
     {
@@ -2088,7 +2151,6 @@ test('outside results reach Pi in one untrusted block, scripts get them raw, and
   let appImage: AgentToolResult | undefined;
   let mcpBlocks: AgentToolResult | undefined;
   let catalog: AgentToolResult | undefined;
-  let savedSession: AgentToolResult | undefined;
   const text = (result: { content: Array<{ type: string; text?: string }> }) =>
     result.content.map((part) => part.text ?? '').join('');
   const page = (body: string) => async () => ({
@@ -2104,11 +2166,6 @@ test('outside results reach Pi in one untrusted block, scripts get them raw, and
       appImage = await call(tools, 'apps', { action: 'SLACK_DOWNLOAD_SLACK_FILE', args: {} });
       mcpBlocks = await call(tools, 'apps', { action: 'CONNECTED_MCP_CALL', args: {} });
       catalog = await call(tools, 'manage_apps', { action: 'discover', query: 'calendar' });
-      savedSession = await call(tools, 'browser_session', {
-        action: 'use',
-        url: 'https://example.com',
-        connectionId: randomUUID(),
-      });
       texts.push(text(await options.runTool('fetch_content', { urls: [] }, page(injected))));
       texts.push(
         text(
@@ -2125,11 +2182,6 @@ test('outside results reach Pi in one untrusted block, scripts get them raw, and
       }));
     },
     {
-      browserConnection: async () => ({
-        status: 'session_opened',
-        connectionId: randomUUID(),
-        observation: { text: injected, url: 'https://example.com' },
-      }),
       connections: async (action, _service, _proposal, _newAccount, query) => {
         assert.equal(action, 'discover');
         assert.equal(query, 'calendar');
@@ -2167,9 +2219,6 @@ test('outside results reach Pi in one untrusted block, scripts get them raw, and
   assert.equal(texts[3], injected);
   assert.match(text(catalog!), /^<untrusted_tool_result source="manage_apps">/);
   assert.equal(text(catalog!).match(/untrusted_tool_result/gi)?.length, 2);
-  assert.match(text(savedSession!), /^<untrusted_tool_result source="browser_session">/);
-  assert.equal(text(savedSession!).match(/untrusted_tool_result/gi)?.length, 2);
-  assert.match(text(savedSession!), /Invoice due/);
   assert.deepEqual(
     screenshot?.content.map((part) => part.type),
     ['text', 'image', 'text'],
@@ -2290,14 +2339,12 @@ test('secure credential pause prevents subsequent tools in the same execution se
     {
       origin: 'https://example.com',
       label: 'Example',
-      kind: 'identifier' as const,
       usernameSelector: '@username',
       submitSelector: '@submit',
     },
     {
       origin: 'https://example.com',
       label: 'Example',
-      kind: 'password' as const,
       passwordSelector: '@password',
       submitSelector: '@submit',
     },
@@ -2581,7 +2628,6 @@ test('private entry returns page data once and stops before an observation after
             label: 'Synthetic login',
             message: 'Sign in.',
             action: 'Continue',
-            kind: 'password',
             passwordSelector: '#password',
           });
           const text = result.content

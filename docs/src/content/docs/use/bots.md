@@ -39,7 +39,7 @@ Select the name at the top of a bot's chat to open its settings: avatar, name, m
 
 ## Remove a bot
 
-Right-click it in the sidebar and select **Remove**. Removing stops its chat, tasks and commands, and deletes its schedules, memory, browser data and team note. Its files stay in the workspace. If part of the clean-up fails, Nod retries it.
+Right-click it in the sidebar and select **Remove**. Removing stops its chat, tasks and commands, closes its browser window, and deletes its schedules, memory, browser downloads and team note. Its files stay in the workspace. If part of the clean-up fails, Nod retries it.
 
 ## What stays with Nod
 

@@ -568,6 +568,10 @@ test(
     const abortedPrompts = new Set<string>();
     const fileContexts = new Map<string, RuntimeContext>();
     const integrationReads: string[] = [];
+    const syntheticEvents = Array.from(
+      { length: 1000 },
+      (_, index) => `Event ${index + 1}: Synthetic planning review in Room ${index % 12}.`,
+    ).join('\n');
     let failRelease = 0;
 
     let limitReached = false;
@@ -612,6 +616,7 @@ test(
               },
             },
           };
+        if (action === 'CALENDAR_LIST_EVENTS') return { text: syntheticEvents };
         integrationReads.push(action);
         return { successful: true, data: { threads: 2 } };
       },
@@ -716,6 +721,19 @@ test(
             mimeType: 'text/plain',
           });
           await context.publishScreenshot!(Buffer.from('synthetic image'), 'research.png');
+          assert.deepEqual(
+            await context.integration('CALENDAR_LIST_EVENTS', {}, undefined, undefined, true),
+            { text: syntheticEvents },
+          );
+          const preview = (await context.integration('CALENDAR_LIST_EVENTS', {})) as {
+            workspaceFile: string;
+            preview: string;
+          };
+          assert.equal(preview.preview.length, 2000);
+          assert.equal(
+            (await readFile(join(context.workspacePath, preview.workspaceFile))).toString(),
+            JSON.stringify({ text: syntheticEvents }),
+          );
           const download = (await context.integration('SLACK_DOWNLOAD_SLACK_FILE', {})) as {
             content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
           };
@@ -3283,6 +3301,42 @@ test(
             background: true,
           });
           await completed(taskCheck, 'scheduled', false, 'reply');
+          const privateValue = 'synthetic-private-provider-value';
+          const failures = [
+            [
+              { kind: 'rate_limited', status: 429 },
+              { failure_class: 'rate_limited', provider_status: 429 },
+            ],
+            [{ kind: 'tools_unsupported', status: 99400 }, { failure_class: 'tools_unsupported' }],
+            [undefined, { failure_class: 'unknown' }],
+          ] as const;
+          for (const [index, [failure, expected]] of failures.entries()) {
+            const prompt = `Synthetic analytics model failure ${index}`;
+            modelErrors.set(
+              prompt,
+              Object.assign(new ModelRequestError(`${privateValue} (HTTP 429)`), {
+                code: privateValue,
+                failure,
+              }),
+            );
+            try {
+              const failed = await thread.submitUserMessage(prompt);
+              await completed(failed.turnId, 'immediate', true, 'failed', 'failed');
+              const event = analyticsEvents.find(
+                (event) =>
+                  event.event === 'turn_completed' &&
+                  event.properties.run_id === analyticsRuns.get(failed.turnId),
+              )!;
+              const { failure_reason, failure_class, provider_status } = event.properties;
+              assert.deepEqual(
+                JSON.parse(JSON.stringify({ failure_reason, failure_class, provider_status })),
+                { failure_reason: 'model', ...expected },
+              );
+              assert.equal(JSON.stringify(event).includes(privateValue), false);
+            } finally {
+              modelErrors.delete(prompt);
+            }
+          }
           assert.deepEqual(
             [requested.turnId, schedule, task, answer.turnId, signedIn, taskCheck].map(
               (id) => ran(id)?.automatic,
@@ -13411,7 +13465,6 @@ test(
       CREATE TABLE model_usage(id text,owner_id text,turn_id uuid,session_id uuid,run_id uuid,parent_run_id uuid,cost_usd double precision,details jsonb,created_at timestamptz DEFAULT now());
       CREATE TABLE tasks(id uuid,owner_id text,turn_id uuid,session_id uuid,state text,step_index integer,steps jsonb,revision integer,applied_revision integer,updated_at timestamptz DEFAULT now());
       CREATE TABLE app_connections(id uuid,owner_id text,slug text,account_id text,account_active boolean,revoked boolean,callback_expires timestamptz,triggers_enabled boolean,watch_failures integer,inbox_failed boolean,inbox_reconnect_required boolean,account_checked_at timestamptz,inbox_checked_at timestamptz,created_at timestamptz DEFAULT now());
-      CREATE TABLE browser_connections(id uuid,owner_id text,state text,checked_at timestamptz,created_at timestamptz DEFAULT now());
       CREATE TABLE discovered_connections(id uuid,owner_id text,reconnect_required boolean,replaced_at timestamptz,paths jsonb,created_at timestamptz DEFAULT now());
       CREATE TABLE model_connections(id uuid,owner_id text,provider text,method text,status text,managed boolean,models jsonb,request_failures jsonb,created_at timestamptz DEFAULT now());
       CREATE TABLE model_settings(owner_id text,selection jsonb,routes jsonb);
@@ -13550,10 +13603,6 @@ test(
       await f.pool.query(
         `INSERT INTO app_connections(id,owner_id,slug,account_id,account_active,revoked,triggers_enabled,watch_failures,inbox_failed,inbox_reconnect_required) VALUES($1,$2,$3,$4,false,false,true,3,true,true)`,
         [randomUUID(), owner, privateText, privateText],
-      );
-      await f.pool.query(
-        `INSERT INTO browser_connections(id,owner_id,state) VALUES($1,$2,'needs_sign_in')`,
-        [randomUUID(), owner],
       );
       await f.pool.query(
         `INSERT INTO discovered_connections(id,owner_id,reconnect_required,paths) VALUES($1,$2,true,$3)`,
@@ -14027,7 +14076,6 @@ test(
     assert.equal(report.connections[0].status, 'reconnect');
     assert.equal(report.connections[0].watchFailures, 3);
     assert.equal(report.connections[0].inboxFailed, true);
-    assert.equal(report.browserConnections.length, 1);
     assert.equal(report.directConnections.length, 1);
     assert.deepEqual(report.directConnections[0].methods, ['mcp', 'other']);
     assert.equal(report.modelConnections[0].provider, 'other');

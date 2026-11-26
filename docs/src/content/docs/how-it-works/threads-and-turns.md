@@ -11,7 +11,7 @@ The short version: you have one thread. Every piece of work on it runs in a sess
 
 ## One thread per owner
 
-Each owner has one active row in the `threads` table, shared by web, Telegram and WhatsApp. The thread ID keys the sandbox workspace and the chat session: its persistent Pi session (the transcript) and its browser. Each bot's chat uses the bot's ID as its session, with its own Pi transcript and browser. Every turn records its bot, inherited from the chat, task or schedule that started it, and each message takes the bot of its turn. So each chat keeps its own history, questions and approvals, and a bot's tasks and schedules report back to its chat.
+Each owner has one active row in the `threads` table, shared by web, Telegram and WhatsApp. The thread ID keys the sandbox workspace and the chat session: its persistent Pi session (the transcript) and its browser. Each bot's chat uses the bot's ID as its session, with its own Pi transcript and browser window. Every turn records its bot, inherited from the chat, task or schedule that started it, and each message takes the bot of its turn. So each chat keeps its own history, questions and approvals, and a bot's tasks and schedules report back to its chat.
 
 The code lives in [`src/server/thread.ts`](https://github.com/n8n-io/nod/blob/main/src/server/thread.ts).
 
@@ -87,7 +87,7 @@ A task that needs an action, question, or approval uses its own session. It keep
 
 The composer never blocks. After each Pi step, a running chat turn takes the oldest queued messages from its own channel and session and steers them into Pi, all at once, before the next model request. Their attachments are copied into the workspace. Images reach the model with the message when the model reads images and they fit the [image limits](/how-it-works/agent-runtime/); others stay workspace files marked as not shown. A reply carries the message it answers. Those messages move to the running turn, and their own turns close. The next line Nod writes after taking them is posted as a message, so an answer to them never shows only as live status.
 
-A message from another channel stops the take. It and every message after it stay queued and run as their own turns. Task turns also take addressed updates from their own channel and session. Event and schedule turns do not take queued messages. Each task update has a revision. The server records the revision when it delivers the input at a model boundary. A queued revision does not mean the model has applied it. Task completion refuses an unread update.
+A message from another channel stops the take. It and every message after it stay queued and run as their own turns. Task turns also take addressed updates from their own channel and session. A message a turn takes counts as your request for what that turn does next, in chat and in tasks. Event and schedule turns do not take queued messages. Each task update has a revision. The server records the revision when it delivers the input at a model boundary. A queued revision does not mean the model has applied it. Task completion refuses an unread update.
 
 ## Waiting and resuming
 
@@ -112,7 +112,7 @@ The next turn checks server status for sign-in forms referenced by its recent ch
 | Background observer                    | A saved session ID on the active thread.                        | Saves qualified nudges and starts separate tasks for outside actions or waits.                                                                                                                                                                    |
 | Schedule or event outside the observer | Its first turn. A task record created there keeps that session. | Uses explicit delivery tools; a linked task also delivers its final reply.                                                                                                                                                                        |
 
-Every session saves its Pi history and opens its own browser on first use. Each runs one turn at a time; different sessions run in parallel.
+Every session saves its Pi history and opens its own tab in the owner's browser on first use. Each runs one turn at a time; different sessions run in parallel.
 
 When a background turn starts, it loads its own messages and recent conversation messages available before that turn, with other sessions' work included only after it finished. The saved Pi history remains separate. A new main chat turn receives reports sent by other sessions. All sessions share the workspace, so files one writes are available for the others to read.
 
@@ -126,24 +126,23 @@ See [Task sessions](/how-it-works/task-sessions/) for the ledger, shared context
 
 ## Subagents
 
-`delegate {title, instruction}` runs one part of a turn as a subagent: another in-memory Pi session with Nod's tools, its own browser and the shared workspace. The model calls it several times in one step, Pi runs those calls in parallel, and each subagent's final answer comes back as an untrusted tool result. The parent then uses the answers, such as to compare three shops. Helpers do not create saved tasks or control the task ledger.
+`delegate {title, instruction}` runs one part of a turn as a subagent: another in-memory Pi session with Nod's tools, its own browser tab and the shared workspace. The model calls it several times in one step, Pi runs those calls in parallel, and each subagent's final answer comes back as an untrusted tool result. The parent then uses the answers, such as to compare three shops. Helpers do not create saved tasks or control the task ledger.
 
 - **Inside the turn.** Subagents run in the turn that started them, with its authority, trace and spending. **Stop** stops them with it.
 - **Needs you.** A subagent returns questions and browser blockers to the parent. An app confirmation still pauses the whole turn.
-- **Tools.** A subagent cannot delegate, ask or send chat messages to the owner, connect apps, sign in, pay, or open saved browser sessions. A paused turn cannot start another subagent.
-- **Browsers.** A subagent's browser is deleted when it finishes.
+- **Tools.** A subagent cannot delegate, ask or send chat messages to the owner, connect apps, sign in or pay. A paused turn cannot start another subagent.
+- **Tabs.** A subagent's tabs close when it finishes.
 - **Files.** Each subagent starts in `.nod/runs/<run ID>` inside the shared workspace. It returns complete file paths to its parent.
 - **Outcomes.** Model failures and incomplete responses return as errors. They do not count as successful empty answers.
 
-## Every session has its own browser
+## One browser, a tab per session
 
-A session opens its browser on its first browser call, so a session that never browses never starts one. Sessions never share a browser.
+A session opens its tab on its first browser call, so a session that never browses never opens one. Every tab lives in the owner's one browser and profile, so sessions share sign-ins and carts, including sessions that run at the same time. See [One browser, a tab per session](/how-it-works/sandbox-and-browser/#one-browser-a-tab-per-session).
 
-- A chat or background session can hand its browser to you. The handoff identifies the exact turn and browser. It closes when that session continues. The developer browser page shows the chat browser.
-- A background session's browser is deleted when the session ends without waiting, or when **Stop** or reset cancels it. If you later continue that task, it starts a fresh, signed-out browser. A reset conversation's browser never comes back.
-- The browser container keeps four browsers live at once. At that limit, a new browser replaces the least recently used one that has been idle for five minutes. A browser waiting for you is never replaced during its 30-minute hold. The replaced browser closes and keeps its profile until it's used again.
-- A browser used in the last five minutes is never closed for another. One idle for longer can be, even while its session or subagent is still running, for example during a long model step. Browsers don't close just because they're idle.
-- When no browser can close yet, a new one waits for a free slot until its session stops. **Stop** cancels the wait at once.
+- A chat or background session can hand its tab to you. The handoff identifies the exact turn and tab. It closes when that session continues. The developer browser page shows the chat's tab.
+- A background session's tab closes when the session ends without waiting, or when **Stop** or reset cancels it. The profile stays, so if you later continue that task, its new tab is still signed in. A reset conversation's tab never comes back.
+- Nothing else closes a tab. There's no limit that replaces one session's tab with another's, and an idle tab stays open while its session lives.
+- After the browser service restarts, a session's next step reopens the page it was on, unless the session stopped on an uncertain action.
 
 ## Stop and failures
 
@@ -161,6 +160,7 @@ Your messages from a withdrawn turn stay in the chat, and Nod can still find the
 - The trust check doesn't count them as your words, and a later short reply never accepts something Nod proposed in that turn.
 - Approval questions do not use them, and memory learning skips them unless Nod names one when you ask it to remember something.
 - A planned task check or another resume does not copy a withdrawn turn's request into its prompt.
+- Anything already saved from that request, such as a schedule, stays saved. Each run uses its saved instruction. To change it, edit, pause or delete the schedule.
 
 The session's next turn is told how its previous request ended, so Nod doesn't pick it up again on its own. What that turn already did stays in the session's context. To continue, ask again. Nod finds the request with `history_search`, and the trust check asks before any action your new words don't cover.
 
@@ -190,11 +190,11 @@ The thread, workspace, browser, independent tasks, schedules, memory, accounts a
 
 ### Start a new conversation
 
-Reset is available through the development API at `POST /api/conversation/reset`. It archives the thread, cancels its turns and closes its open task records. The next turn starts a new Pi session, workspace and browser.
+Reset is available through the development API at `POST /api/conversation/reset`. It archives the thread, cancels its turns and closes its open task records. The next turn starts a new Pi session, workspace and browser tab.
 
-| Archived                                             | Deleted                                                    | Kept                                                          |
-| ---------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------- |
-| The thread with its messages, turns and task history | The old browser's throwaway profile, downloads and screens | Accounts, Vault, schedules, saved browser sessions and memory |
+| Archived                                             | Deleted                             | Kept                                                       |
+| ---------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------- |
+| The thread with its messages, turns and task history | The old tabs, downloads and screens | Accounts, Vault, schedules, the browser profile and memory |
 
 The web client sends its `threadId` with each message, so a late message from before the reset is refused. A chat-app message Nod was still reading is saved in the new thread with its turn already cancelled.
 

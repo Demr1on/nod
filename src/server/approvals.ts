@@ -26,7 +26,7 @@ import type { TrustBasis } from './trust-basis.ts';
 import {
   ownerChatRevision,
   validateInstructionChange,
-  validateOwnerInstructions,
+  validateSavedInstructions,
   type InstructionChange,
   type OwnerInstructions,
 } from './owner-instructions.ts';
@@ -410,20 +410,20 @@ export async function createApprovals(
       if (!chain || !origin) throw new Error('This action needs a direct request from the user.');
       let steering: { id: string; text: string } | undefined;
       if (options.sourceMessageId && options.sourceMessageId !== current.message_id) {
-        if (!current.background)
-          steering = (
-            await client.query<{ id: string; text: string }>(
-              "SELECT id,text FROM messages WHERE id=$1 AND owner_id=$2 AND thread_id=$3 AND turn_id=$4 AND role='user'",
-              [options.sourceMessageId, ownerId, turn.threadId, turn.turnId],
-            )
-          ).rows[0];
+        steering = (
+          await client.query<{ id: string; text: string }>(
+            `SELECT m.id,m.text FROM messages m WHERE m.id=$1 AND m.owner_id=$2 AND m.thread_id=$3 AND m.turn_id=$4
+             AND m.role='user' AND m.hidden_at IS NULL AND NOT ${withdrawnSql('m')}`,
+            [options.sourceMessageId, ownerId, turn.threadId, turn.turnId],
+          )
+        ).rows[0];
         if (!steering) throw new Error('This action needs a direct request from the user.');
       }
       const background = !steering && ['event', 'schedule'].includes(origin.source);
       let authorMessageId: string | null;
       const schedule =
         origin.source === 'schedule' ? await scheduleAuthority(client, origin.id) : undefined;
-      if (schedule?.authority) await validateOwnerInstructions(client, ownerId, schedule.authority);
+      if (schedule?.authority) validateSavedInstructions(schedule.authority);
       if (steering) {
         authorMessageId = steering.id;
       } else if (origin.source === 'event') {
