@@ -112,9 +112,12 @@ export function SidePanel({
   );
   const [picked, setPicked] = useState<string | null>(null);
   const [skipping, setSkipping] = useState<string | null>(null);
-  useEffect(() => {
-    writeUiPreference('nod.side-skipped', skipped.join(','));
-  }, [skipped]);
+  const skippedNow = useRef(skipped);
+  const skip = (ids: string[]) => {
+    skippedNow.current = ids;
+    setSkipped(ids);
+    writeUiPreference('nod.side-skipped', ids.join(','));
+  };
   const every: Step[] = [
     {
       id: 'app',
@@ -294,7 +297,7 @@ export function SidePanel({
                             onClick={() => {
                               setSkipping(step.id);
                               window.setTimeout(() => {
-                                setSkipped((current) => [...new Set([...current, step.id])]);
+                                skip([...new Set([...skippedNow.current, step.id])]);
                                 setSkipping(null);
                                 setPicked(null);
                               }, 320);
@@ -310,7 +313,7 @@ export function SidePanel({
               </ul>
               {skipped.length > 0 && (
                 <div className="side-links">
-                  <button type="button" onClick={() => setSkipped([])}>
+                  <button type="button" onClick={() => skip([])}>
                     Bring back {skipped.length} skipped
                   </button>
                 </div>
