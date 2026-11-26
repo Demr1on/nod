@@ -5,7 +5,7 @@ import type { ChannelSettings } from '../lib/secondary-pages';
 import { navigate } from '../lib/navigation';
 import { readUiPreference, writeUiPreference } from '../lib/ui-preferences';
 import { ScheduleRow } from '../pages/schedule';
-import { TaskCard } from '../pages/tasks';
+import { LoadError, Pending, TaskCard } from '../pages/tasks';
 import { ChevronDown, X } from './icons';
 import { NodGlyph, prefersReducedMotion } from './motion';
 import { NewPlan } from './plan-controls';
@@ -90,7 +90,8 @@ export function SidePanel({
   onAsk(text: string): void;
   onClose(): void;
 }) {
-  const { data: schedules } = usePageData<Schedule[]>('/api/schedules');
+  const scheduled = usePageData<Schedule[]>('/api/schedules');
+  const schedules = scheduled.data;
   const { data: channels } = usePageData<ChannelSettings>('/api/channel-settings');
   const ready = Boolean(connections && schedules && channels);
   const recurring = (schedules ?? []).filter((item) => item.kind === 'recurring' && item.enabled);
@@ -111,10 +112,9 @@ export function SidePanel({
   );
   const [picked, setPicked] = useState<string | null>(null);
   const [skipping, setSkipping] = useState<string | null>(null);
-  const skip = (ids: string[]) => {
-    setSkipped(ids);
-    writeUiPreference('nod.side-skipped', ids.join(','));
-  };
+  useEffect(() => {
+    writeUiPreference('nod.side-skipped', skipped.join(','));
+  }, [skipped]);
   const every: Step[] = [
     {
       id: 'app',
@@ -294,7 +294,7 @@ export function SidePanel({
                             onClick={() => {
                               setSkipping(step.id);
                               window.setTimeout(() => {
-                                skip([...skipped, step.id]);
+                                setSkipped((current) => [...new Set([...current, step.id])]);
                                 setSkipping(null);
                                 setPicked(null);
                               }, 320);
@@ -310,7 +310,7 @@ export function SidePanel({
               </ul>
               {skipped.length > 0 && (
                 <div className="side-links">
-                  <button type="button" onClick={() => skip([])}>
+                  <button type="button" onClick={() => setSkipped([])}>
                     Bring back {skipped.length} skipped
                   </button>
                 </div>
@@ -370,7 +370,16 @@ export function SidePanel({
             <div>
               <NewPlan onAsk={onAsk} />
             </div>
-            {upcoming.length ? (
+            {scheduled.error && (
+              <LoadError
+                what="schedules"
+                refreshing={scheduled.refreshing}
+                retry={scheduled.refresh}
+              />
+            )}
+            {!schedules ? (
+              scheduled.loading && <Pending label="Loading schedules…" />
+            ) : upcoming.length ? (
               <div className="schedule-list">
                 {upcoming.slice(0, limit).map((schedule) => (
                   <ScheduleRow

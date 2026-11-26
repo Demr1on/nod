@@ -100,7 +100,7 @@
   animation: side-dismiss 320ms var(--ease-travel) forwards;
 }
 .side-step[data-fresh='true'] {
-  animation: side-flash 1400ms ease-out;
+  animation: side-flash 840ms ease-out;
 }
 .side-step-title {
   padding: 0;

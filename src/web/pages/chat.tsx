@@ -374,7 +374,9 @@ export function Chat({
     writeUiPreference('nod.trace-open', String(open));
   }
   const [sideOpen, setSideOpen] = useState(sidePanelOpenByDefault);
+  const sideShown = sideOpen && !tracing;
   function toggleSide(open: boolean) {
+    if (open && tracing) toggleTrace(false);
     setSideOpen(open);
     writeUiPreference('nod.side-open', String(open));
   }
@@ -2236,15 +2238,15 @@ export function Chat({
           </Button>
         </Tooltip>
       )}
-      <Tooltip content={sideOpen ? 'Hide tasks' : 'Show tasks'}>
+      <Tooltip content={sideShown ? 'Hide tasks' : 'Show tasks'}>
         <Button
           variant="ghost"
           size="icon"
           className="side-toggle"
-          data-nudge={!sideOpen}
-          aria-label={sideOpen ? 'Hide tasks' : 'Show tasks'}
-          aria-pressed={sideOpen}
-          onClick={() => toggleSide(!sideOpen)}
+          data-nudge={!sideShown}
+          aria-label={sideShown ? 'Hide tasks' : 'Show tasks'}
+          aria-pressed={sideShown}
+          onClick={() => toggleSide(!sideShown)}
         >
           <ListChecks size={16} />
         </Button>
@@ -2258,6 +2260,7 @@ export function Chat({
       )}
     </>
   );
+  const sendBlocked = !state.configuration.llmReady || welcoming || spendingPaused;
   return (
     <PrivateEntryWorkspace key={`${ownerId}.${threadId}`} active={visible}>
       <ArtifactWorkspace
@@ -2267,13 +2270,16 @@ export function Chat({
           tracing ? (
             <TraceDrawer changed={state.turns} onClose={() => toggleTrace(false)} />
           ) : (
-            sideOpen && (
+            sideOpen &&
+            visible && (
               <SidePanel
                 tasks={state.tasks ?? []}
                 activity={state.activity ?? []}
                 connections={connections}
-                disabled={!state.configuration.llmReady || welcoming || spendingPaused}
-                onAsk={(text) => void send(text, [], null, 'task_card')}
+                disabled={sendBlocked}
+                onAsk={(text) => {
+                  if (!sendBlocked) void send(text, [], null, 'task_card');
+                }}
                 onClose={() => toggleSide(false)}
               />
             )

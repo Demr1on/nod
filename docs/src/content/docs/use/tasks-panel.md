@@ -13,7 +13,7 @@ Tasks and schedules in the panel are the same ones as on the **Scheduled** page,
 
 Select **Show tasks** in the chat toolbar. Select **Hide tasks**, or the close button in the panel, to close it.
 
-The panel opens by itself in a window that is 1,180 pixels wide or wider. Nod remembers in this browser whether you closed it. A file preview or a trace uses the same space, so the panel waits behind it.
+The panel opens by itself in a window that is 1,180 pixels wide or wider. Nod remembers in this browser whether you closed it. A file preview or a trace uses the same space, so the panel waits behind it. Selecting **Show tasks** while a trace is open closes the trace.
 
 ## Getting started
 
@@ -26,12 +26,12 @@ The panel opens by itself in a window that is 1,180 pixels wide or wider. Nod re
 | **Give Nod a recurring job**  | One recurring schedule is turned on. |
 | **Reach Nod from your phone** | One chat channel is turned on.       |
 
-Select a step to open it. An open step has a button that opens the matching page, such as **Open Apps**, and a button that asks Nod to help. That button sends a normal chat message, and Nod answers in chat.
+Select a step to open it. Where a step has a matching page, an open step has a button that opens it, such as **Open Apps**. Until the step is done, it also has a button that asks Nod to help. That button sends a normal chat message, and Nod answers in chat.
 
-- To leave a step out, select **Skip**. The **Bring back** link under the list restores skipped steps.
+- To leave a step out, select **Skip**. While other steps remain, the **Bring back** link under the list restores skipped steps.
 - When every step is done or skipped, the section goes away.
 
-If you used Nod before the panel existed, steps you had already done are left out. The rest appear under **Get more from Nod**. When nothing is left, the section doesn't appear.
+Steps that are already done the first time the panel opens are left out. The rest appear under **Get more from Nod**. When nothing is left, the section doesn't appear.
 
 :::note
 Skipped steps are saved in this browser only. On another device the list starts from what you have set up.
@@ -41,7 +41,7 @@ Skipped steps are saved in this browser only. On another device the list starts 
 
 **Tasks** lists your open tasks. Select a task to see its steps, Nod's question or the result, and to choose **Show in chat**, **Show activity**, **Show commands** or **Stop this task**.
 
-**Finished** holds your five most recent finished tasks, with a link to the rest on the **Scheduled** page.
+**Finished** holds your five most recent done or stopped tasks, with a link to the rest on the **Scheduled** page.
 
 ## Schedules
 
