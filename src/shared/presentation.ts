@@ -422,12 +422,18 @@ export const compareColumn = (
 
 type PictureSlot = { url: string; fallback: boolean } | null;
 
+const mapPage = (url: string) =>
+  /^https:\/\/([^/]+\.)?(google\.[a-z.]+\/maps|maps\.google\.|maps\.app\.goo\.gl|goo\.gl\/maps|maps\.apple\.com|(www\.)?openstreetmap\.org|(www\.)?bing\.com\/maps)/i.test(
+    url,
+  );
+
 export function pictureSlots(value: Presentation | undefined): PictureSlot[] {
   if (value?.type === 'items')
     return value.items.map((item, index) => {
       if (index >= 8) return null;
       if (typeof item.image === 'string') return { url: item.image, fallback: false };
-      if (!item.image && item.url && !item.route) return { url: item.url, fallback: true };
+      if (!item.image && item.url && !item.route && !mapPage(item.url))
+        return { url: item.url, fallback: true };
       return null;
     });
   if (value?.type === 'compare')
