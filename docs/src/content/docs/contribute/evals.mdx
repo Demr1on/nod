@@ -218,6 +218,8 @@ The agent is `openai/gpt-6.1-sol` at high reasoning effort, and the judge is `an
 The branch's code runs with the eval keys.
 :::
 
+When the baseline commit was already scored by a successful nightly run, the workflow reuses that run's results instead of running the baseline again. It does so only for the **full** tier with three attempts, no case filter or spend limit, the same model and judge, and no changes to `evals/` or the Dockerfiles since the baseline. Tick **fresh_baseline** to run the baseline again, for example when provider behaviour may have changed since the night before.
+
 With a baseline, the run summary shows the verdict and both sides' scores. Without one, it shows this run's scores. The `capability-evals` artifact, kept for 14 days, has a `report.html` for each run. A low score doesn't fail the workflow. It fails only when nothing could be scored.
 
 The release cases `owner-warm-mail-work` and `owner-day-unchanged-source` check session reuse and idle model cost. `owner-long-context-recall` supplies six large temporary reports and checks their facts after context growth. `returning-user-po-detail` and `returning-user-two-gaps-decision` wait six minutes of real time between requests, so the prompt cache goes cold, and check that details read before the break stay correct, drafts include them and no action repeats. Saved attempt metrics include actual Pi compaction counts and each cost row's foreground, observer, background or housekeeping role. Agent-category cost includes all agent roles; it does not mean foreground chat only. The source case advances 48 half-hour poll deadlines against fixed records and tokens; it is a simulated owner-day, not a real 24-hour soak. `gmail-filter-website-fallback` checks a definite API denial followed by the same requested website change. `browser-flight-search-no-confirmation` checks search controls without a booking. `browser-calendar-retry-uncertain-save` checks that a retry finds an event saved without a receipt and creates no duplicate.
@@ -248,14 +250,16 @@ Some scenarios append judge-only evidence and criterion explanations. Their fing
 
 ## What the verdict means
 
-A run with a baseline ends in **GO**, **NO-GO** or **INCONCLUSIVE**. Both sides run in one job with the same harness, scenarios, images, model and judge, so only the app code differs.
+A run with a baseline ends in **GO**, **NO-GO** or **INCONCLUSIVE**. Both sides use the same harness, scenarios, images, model and judge, so only the app code differs. A reused nightly baseline ran on an earlier day.
 
 ```mermaid
 flowchart TD
   canary{{Harness canary passes<br/>and a gate scenario ran?}} -- no --> inc[INCONCLUSIVE]:::muted
   canary -- yes --> worse{{A gate scenario did worse<br/>or has too few attempts?}}
   worse -- no --> go[GO]:::go
-  worse -- yes --> more[Seven more attempts<br/>on both sides]
+  worse -- yes --> blocked{{Already a NO-GO?}}
+  blocked -- yes --> nogo
+  blocked -- no --> more[Seven more attempts<br/>on both sides]
   more --> drop{{Significant drop or<br/>safety check failed?}}
   drop -- yes --> nogo[NO-GO]:::stop
   drop -- no --> go
@@ -279,7 +283,7 @@ flowchart TD
   - Across at least five gate scenarios, paired by scenario, the pass rate falls by 5 points or more with a 95% interval entirely below zero.
 - **INCONCLUSIVE** when no gate scenario ran, a gate scenario completed fewer than three attempts on either side, or a gate scenario that passed at least 70% on the baseline dropped but has fewer than 10 completed attempts on either side. It's also inconclusive when the harness canary failed, the sides ran different models or judges, the judge is the agent model, or the run failed.
 - **GO** otherwise.
-- Gate scenarios where the candidate did worse, or that completed too few attempts, get seven more attempts on both sides, so a drop is judged on at least 10.
+- Gate scenarios where the candidate did worse, or that completed too few attempts, get seven more attempts on both sides, run at the same time, so a drop is judged on at least 10. When the first attempts already give a NO-GO, through a safety check or the paired drop, nothing is rerun.
 - The 70% floor applies only to the per-scenario test. A drop from a lower baseline still counts towards the paired drop across gate scenarios.
 - A failure class is listed when it has at least three more failures and a rate five points higher than on the baseline. This never blocks.
 - Both sides use the candidate's Dockerfiles, so image changes aren't compared.

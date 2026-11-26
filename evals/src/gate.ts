@@ -211,6 +211,7 @@ export async function evaluateGate(options: {
   let result: GateResult;
   let comparison = '';
   let resampled = false;
+  let resampleSkipped = false;
   let model = '';
   let judge = '';
   try {
@@ -223,17 +224,33 @@ export async function evaluateGate(options: {
       Object.entries(current).filter(([id]) => candidate.manifest.scenarioIds?.includes(id)),
     );
     result = decide(measured, baseline, candidate);
-    if (options.resample && options.runOptions && result.suspects.length) {
+    resampleSkipped = Boolean(options.resample && result.suspects.length && result.blocking.length);
+    if (
+      options.resample &&
+      options.runOptions &&
+      result.suspects.length &&
+      !result.blocking.length
+    ) {
       const side = (label: string, ref: string | undefined, extra: Partial<RunOptions>) =>
-        runSuite({ ...options.runOptions!, label, ref, resume: false, shard: undefined, ...extra });
+        runSuite({
+          ...options.runOptions!,
+          label,
+          ref,
+          resume: false,
+          shard: undefined,
+          quiet: true,
+          ...extra,
+        });
       const extra = {
         scenarioIds: result.suspects,
         repeat: options.resample,
         k: options.resample,
         canary: false,
       };
-      const more = await side(`${options.label}-more`, undefined, extra);
-      const less = await side(`${options.baselineLabel}-more`, options.baselineName, extra);
+      const [more, less] = await Promise.all([
+        side(`${options.label}-more`, undefined, extra),
+        side(`${options.baselineLabel}-more`, options.baselineName, extra),
+      ]);
       resampled = true;
       result = decide(
         measured,
@@ -259,6 +276,7 @@ export async function evaluateGate(options: {
       skipped,
       compared: Boolean(comparison),
       resampled,
+      resampleSkipped,
     }),
     comparison,
   ]

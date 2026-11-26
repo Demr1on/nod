@@ -229,9 +229,10 @@ async function attemptOnce(options: {
   backgroundModel?: string;
   effort?: ModelEffort;
   judge: string;
+  source?: string;
   task: { item: (typeof scenarios)[number]; attempt: number };
 }) {
-  const { directory, model, backgroundModel, effort, judge, task } = options;
+  const { directory, model, backgroundModel, effort, judge, source, task } = options;
   const file = join(directory, 'attempts', `${task.item.id}.${task.attempt}.json`);
   const specPath = join(tmpdir(), `nod-eval-${randomUUID()}.json`);
   await writeFile(
@@ -249,7 +250,11 @@ async function attemptOnce(options: {
   const child = spawn(
     process.execPath,
     ['--import', 'tsx', join(repository, 'evals/src/attempt.ts'), specPath],
-    { cwd: repository, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] },
+    {
+      cwd: repository,
+      env: { ...process.env, NOD_EVAL_SOURCE: source ?? '' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
   );
   let captured = '';
   for (const stream of [child.stdout, child.stderr])
@@ -300,7 +305,12 @@ async function attemptOnce(options: {
     });
 }
 
-async function checkHarness(model: string, judge: string, backgroundModel?: string) {
+async function checkHarness(
+  model: string,
+  judge: string,
+  backgroundModel?: string,
+  source?: string,
+) {
   const item = scenarios.find((entry) => entry.id === 'harness-canary')!;
   const directory = join(tmpdir(), `nod-eval-canary-${randomUUID()}`);
   await mkdir(join(directory, 'attempts'), { recursive: true });
@@ -314,6 +324,7 @@ async function checkHarness(model: string, judge: string, backgroundModel?: stri
       model,
       backgroundModel,
       judge,
+      source,
       task: { item, attempt },
     });
     if (result.status === 'incomplete' && result.blame === 'infra' && faults < 2) {
@@ -379,11 +390,11 @@ export async function runSuite(options: RunOptions) {
     source = join(tmpdir(), `nod-eval-ref-${refCommit.slice(0, 10)}-${randomUUID().slice(0, 6)}`);
     git('worktree', 'add', '--detach', source, refCommit);
     await symlink(join(repository, 'node_modules'), join(source, 'node_modules'));
-    process.env.NOD_EVAL_SOURCE = source;
-  } else delete process.env.NOD_EVAL_SOURCE;
+  }
+  const refSource = options.ref ? source : undefined;
   try {
     if (options.canary !== false && selected.some((item) => item.tier !== 'canary'))
-      await checkHarness(model, judge, options.backgroundModel);
+      await checkHarness(model, judge, options.backgroundModel, refSource);
     const digest = async (image: string) =>
       (await runProcess('docker', ['image', 'inspect', image, '--format', '{{.Id}}'])).stdout
         .trim()
@@ -469,6 +480,7 @@ export async function runSuite(options: RunOptions) {
             ...(options.backgroundModel ? { backgroundModel: options.backgroundModel } : {}),
             effort: options.effort ?? 'high',
             judge,
+            source: refSource,
             task,
           });
           attempted = true;

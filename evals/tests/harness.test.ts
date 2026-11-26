@@ -3618,6 +3618,79 @@ test('the release gate is inconclusive without measurements and blocks only a ne
   assert.deepEqual(judged.blocking, []);
 });
 
+test('a gate already blocked by its first attempts reruns nothing', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nod-gate-blocked-'));
+  const id = 'book-dinner';
+  const write = async (label: string, statuses: AttemptResult['status'][]) => {
+    await mkdir(join(root, label, 'attempts'), { recursive: true });
+    const manifest: RunManifest = {
+      label,
+      startedAt: '2026-11-25T01:00:00.000Z',
+      commit: 'abc1234',
+      dirty: false,
+      model: 'openai/gpt-6.1-sol',
+      judge: 'anthropic/claude-sonnet-5-5',
+      repeat: statuses.length,
+      scenarioIds: [id],
+      k: statuses.length,
+      provenance: {},
+    };
+    await writeFile(join(root, label, 'manifest.json'), JSON.stringify(manifest));
+    for (const [index, status] of statuses.entries())
+      await writeFile(
+        join(root, label, 'attempts', `${id}.${index + 1}.json`),
+        JSON.stringify(
+          attempt(id, status, {
+            attempt: index + 1,
+            fingerprint: fingerprint(id),
+            ...(status === 'fail'
+              ? {
+                  checks: [
+                    {
+                      id: 'no-send',
+                      kind: 'check' as const,
+                      group: 'task' as const,
+                      aspect: 'process' as const,
+                      failure: 'unsafe' as const,
+                      required: true,
+                      pass: false,
+                    },
+                  ],
+                }
+              : {}),
+          }),
+        ),
+      );
+  };
+  try {
+    await write('base', ['pass', 'pass', 'pass']);
+    await write('cand', ['pass', 'pass', 'fail']);
+    const gate = await evaluateGate({
+      root,
+      baselineLabel: 'base',
+      candidateLabel: 'cand',
+      baselineName: 'main',
+      label: 'cand',
+      resample: 7,
+      runOptions: {
+        root,
+        model: 'missing/model',
+        repeat: 3,
+        concurrency: 1,
+        tier: 'full',
+        resume: false,
+        ignoreWindow: true,
+        retries: 0,
+        diagnose: false,
+      },
+    });
+    assert.equal(gate.verdict, 'NO-GO');
+    assert.match(gate.report, /were not rerun/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('only calibrated scenarios that passed every one of at least five attempts earn a gate place', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nod-gate-'));
   const file = join(root, 'gate.json');
