@@ -881,7 +881,11 @@ export function Chat({
               if (!opened)
                 window.dispatchEvent(
                   new CustomEvent('nod:focus-message', {
-                    detail: { messageId: task.messageId, taskId: task.id },
+                    detail: {
+                      messageId: task.messageId,
+                      taskId: task.id,
+                      ...(chat ? { botId: chat.id } : {}),
+                    },
                   }),
                 );
             },
@@ -2775,7 +2779,9 @@ export function Chat({
               busy={connected && working}
               text={text}
               setText={setText}
-              replyTo={replyTo}
+              replyTo={
+                replyTo?.role === 'assistant' && chat ? { ...replyTo, from: chat.name } : replyTo
+              }
               replyPreviewPending={Boolean(
                 replyTo && replyNeedsValidation(replyTo.id) && !replyValidationFailed(replyTo.id),
               )}

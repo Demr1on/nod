@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, Message, MessageHistoryPage } from '../../shared/contracts';
-import { api } from '../lib/api';
+import { api, errorMessage } from '../lib/api';
+import { Button, Notice } from '../components/ui';
 import { ChatTop, BotEmpty } from '../components/bots';
 import { ChatBot, type Bot } from '../lib/bots';
 import { Chat } from './chat';
@@ -18,6 +19,7 @@ export function BotChat({
   onNavigate,
   onRead,
   onFeedback,
+  focusMessageId,
 }: {
   bot: Bot;
   ownerId: string;
@@ -31,8 +33,11 @@ export function BotChat({
   onNavigate(path: string): void;
   onRead(chatId: string, at: string): void;
   onFeedback?(): void;
+  focusMessageId?: string;
 }) {
   const [page, setPage] = useState<MessageHistoryPage | null>(null);
+  const [failure, setFailure] = useState('');
+  const [attempt, setAttempt] = useState(0);
   const [tools, setTools] = useState<HTMLDivElement | null>(null);
   const request = useRef(0);
   const chatTurns = state.turns.filter((turn) => turn.botId === bot.id);
@@ -41,10 +46,14 @@ export function BotChat({
     const current = ++request.current;
     void api<MessageHistoryPage>(`/api/bots/${bot.id}/messages`)
       .then((next) => {
-        if (request.current === current) setPage(next);
+        if (request.current !== current) return;
+        setPage(next);
+        setFailure('');
       })
-      .catch(() => {});
-  }, [bot.id, version]);
+      .catch((cause) => {
+        if (request.current === current) setFailure(errorMessage(cause));
+      });
+  }, [bot.id, version, attempt]);
   const latest = page?.messages.at(-1)?.createdAt;
   useEffect(() => {
     if (visible && latest) onRead(bot.id, latest);
@@ -55,7 +64,7 @@ export function BotChat({
       if (event.key !== 'Escape' || panelOpen) return;
       const busy = [
         ...document.querySelectorAll(
-          '[role="dialog"],[role="menu"],.bot-chat-route .composer-reply',
+          '[role="dialog"],[role="menu"],.artifact-drawer,.bot-chat-route :is(.composer-reply,.composer.has-recording)',
         ),
       ].some((element) => element.getClientRects().length);
       if (busy) return;
@@ -95,6 +104,14 @@ export function BotChat({
   return (
     <div className="bot-chat-route chat-surface">
       <ChatTop bot={bot} panelOpen={panelOpen} onTogglePanel={onTogglePanel} toolsRef={setTools} />
+      {!page && failure && (
+        <div className="initial-loading">
+          <Notice>{failure}</Notice>
+          <Button variant="outline" onClick={() => setAttempt((value) => value + 1)}>
+            Try again
+          </Button>
+        </div>
+      )}
       {page && (
         <ChatBot.Provider value={bot.id}>
           <Chat
@@ -108,6 +125,7 @@ export function BotChat({
             visible={visible}
             toolbarActions={tools}
             readUnavailable
+            initialFocusMessageId={focusMessageId}
             onFeedback={onFeedback}
             empty={<BotEmpty bot={bot} />}
           />

@@ -93,9 +93,9 @@ const messageFields = `m.id,m.role,m.text,m.bot_id AS "botId",CASE WHEN m.role='
        k.source_message_id)
      WHERE k.owner_id=m.owner_id AND k.message_id=target.id LIMIT 1) END,
    json_build_object('id',target.id,'role',target.role,'text',COALESCE(m.reply_quote,''),'isQuote',m.reply_quote IS NOT NULL)) END AS "replyTo"`;
-const chatScopeSql = (botId?: string) =>
-  `NOT ${reactionReplySql('m')} AND ${botId ? `m.bot_id='${z.uuid().parse(botId)}'::uuid` : 'm.bot_id IS NULL'}`;
-const chatMessageSql = chatScopeSql();
+const chatScopeSql = (bot: string) =>
+  `NOT ${reactionReplySql('m')} AND m.bot_id IS NOT DISTINCT FROM ${bot}::uuid`;
+const chatMessageSql = `NOT ${reactionReplySql('m')} AND m.bot_id IS NULL`;
 const textMessageOptions = {
   bodyLimit: 8 * 1024 * 1024,
   config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
@@ -468,12 +468,12 @@ export async function createApp(dependencies: AppDependencies = {}) {
            || jsonb_path_query_array(m.presentation,'strict $.** ? (@.type() == "array")[*] ? (@.type() == "string" || @.type() == "number")') AS content
          WHERE m.role='assistant' AND m.presentation->>'version'='1'
        ) visual ON true
-       WHERE m.owner_id=$1 AND m.thread_id=$2 AND m.hidden_at IS NULL AND ${chatScopeSql(botId)} AND (
+       WHERE m.owner_id=$1 AND m.thread_id=$2 AND m.hidden_at IS NULL AND ${chatScopeSql('$4')} AND (
          to_tsvector('english',m.text) @@ websearch_to_tsquery('english',$3) OR strpos(lower(m.text),lower($3))>0
          OR jsonb_to_tsvector('english',visual.content,'["string","numeric"]') @@ websearch_to_tsquery('english',$3)
          OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(visual.content) value WHERE strpos(lower(value),lower($3))>0)
        ) ORDER BY m.created_at DESC,m.id DESC LIMIT 50`,
-      [ownerId, thread.id, q],
+      [ownerId, thread.id, q, botId ?? null],
     );
     const visualTexts = rows.flatMap((row) => {
       const fallback = row.role === 'assistant' ? visualText(row.presentation) : '';
@@ -501,18 +501,17 @@ export async function createApp(dependencies: AppDependencies = {}) {
   app.get('/api/messages/around/:id', async (request) => {
     const { id } = z.object({ id: z.uuid() }).parse(request.params);
     const { botId } = z.object({ botId: z.uuid().optional() }).parse(request.query);
-    const scope = chatScopeSql(botId);
     const thread = await activeThread(pool);
     const hit = (
       await pool.query(
-        `SELECT m.created_at FROM messages m WHERE m.id=$1 AND m.owner_id=$2 AND m.thread_id=$3 AND m.hidden_at IS NULL AND ${scope}`,
-        [id, ownerId, thread.id],
+        `SELECT m.created_at FROM messages m WHERE m.id=$1 AND m.owner_id=$2 AND m.thread_id=$3 AND m.hidden_at IS NULL AND ${chatScopeSql('$4')}`,
+        [id, ownerId, thread.id, botId ?? null],
       )
     ).rows[0];
     if (!hit) throw Object.assign(new Error('Message not found.'), { statusCode: 404 });
     const { rows } = await pool.query(
-      `SELECT ${messageFields} FROM messages m LEFT JOIN messages target ON target.id=m.reply_to_message_id AND target.owner_id=m.owner_id AND target.hidden_at IS NULL WHERE m.owner_id=$1 AND m.thread_id=$2 AND m.hidden_at IS NULL AND ${scope} AND m.created_at BETWEEN $3::timestamptz-interval '1 day' AND $3::timestamptz+interval '1 day' ORDER BY (m.id=$4) DESC,abs(extract(epoch FROM m.created_at-$3::timestamptz)),m.id LIMIT 60`,
-      [ownerId, thread.id, hit.created_at, id],
+      `SELECT ${messageFields} FROM messages m LEFT JOIN messages target ON target.id=m.reply_to_message_id AND target.owner_id=m.owner_id AND target.hidden_at IS NULL WHERE m.owner_id=$1 AND m.thread_id=$2 AND m.hidden_at IS NULL AND ${chatScopeSql('$5')} AND m.created_at BETWEEN $3::timestamptz-interval '1 day' AND $3::timestamptz+interval '1 day' ORDER BY (m.id=$4) DESC,abs(extract(epoch FROM m.created_at-$3::timestamptz)),m.id LIMIT 60`,
+      [ownerId, thread.id, hit.created_at, id, botId ?? null],
     );
     return messageViews(rows);
   });
@@ -564,10 +563,10 @@ export async function createApp(dependencies: AppDependencies = {}) {
     const rows = await pool.query(
       `SELECT ${messageFields} FROM messages m
       LEFT JOIN messages target ON target.id=m.reply_to_message_id AND target.owner_id=m.owner_id AND target.hidden_at IS NULL
-      WHERE m.owner_id=$1 AND m.thread_id=$4 AND m.hidden_at IS NULL AND ${chatScopeSql(botId)}
+      WHERE m.owner_id=$1 AND m.thread_id=$4 AND m.hidden_at IS NULL AND ${chatScopeSql('$5')}
         AND ($2::timestamptz IS NULL OR date_trunc('milliseconds',m.created_at) < $2 OR (date_trunc('milliseconds',m.created_at) = $2 AND $3::uuid IS NOT NULL AND m.id < $3))
       ORDER BY date_trunc('milliseconds',m.created_at) DESC,m.id DESC LIMIT 61`,
-      [ownerId, query.before ?? null, query.beforeId ?? null, thread.id],
+      [ownerId, query.before ?? null, query.beforeId ?? null, thread.id, botId],
     );
     const page = rows.rows.slice(0, 60);
     return {
@@ -635,13 +634,14 @@ export async function createApp(dependencies: AppDependencies = {}) {
       .parse(request.body);
     const clientMessageId = input.clientMessageId ?? randomUUID();
     if (
-      !input.botId &&
       input.text.trim().toLowerCase() === '/clear' &&
       (!input.questionAnswer ||
         ('custom' in input.questionAnswer && input.questionAnswer.custom === true)) &&
       !input.approvalAnswer &&
       !input.verificationRequestId
     ) {
+      if (input.botId)
+        throw Object.assign(new Error('/clear works in Nod’s chat only.'), { statusCode: 400 });
       if (input.attachmentIds.length)
         throw Object.assign(new Error('Send /clear as a text message without attachments.'), {
           statusCode: 400,

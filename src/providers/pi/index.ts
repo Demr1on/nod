@@ -82,7 +82,7 @@ function thinkingLines(text: string, titled: boolean) {
     .split(/\n\s*\n/)
     .map((paragraph) => {
       const plain = paragraph
-        .replace(/[*_`#>]/g, '')
+        .replace(/[*`#>]/g, '')
         .replace(/\s+/g, ' ')
         .trim();
       const sentence = (plain.match(/^.{12,}?[.!?:](?=\s|$)/)?.[0] ?? plain).replace(/:$/, '');

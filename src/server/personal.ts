@@ -69,12 +69,16 @@ export function createPersonalService(dependencies: PersonalDependencies) {
           statusCode: 400,
         },
       );
-    const { rows } = await pool.query(
-      `SELECT 1 FROM ${kind} t JOIN turns u ON u.id=$3 AND u.owner_id=t.owner_id
-       WHERE t.owner_id=$1 AND t.id=$2::uuid AND t.bot_id IS NOT DISTINCT FROM u.bot_id`,
+    const { rows } = await pool.query<{ own: boolean }>(
+      `SELECT t.bot_id IS NOT DISTINCT FROM u.bot_id AS own FROM ${kind} t
+       JOIN turns u ON u.id=$3 AND u.owner_id=t.owner_id WHERE t.owner_id=$1 AND t.id=$2::uuid`,
       [ownerId, id.data, turnId],
     );
     if (!rows.length)
+      throw Object.assign(new Error(`${kind === 'schedules' ? 'Schedule' : 'Task'} not found.`), {
+        statusCode: 404,
+      });
+    if (!rows[0]!.own)
       throw Object.assign(
         new Error(`That ${kind === 'schedules' ? 'schedule' : 'task'} belongs to another chat.`),
         { statusCode: 403 },
@@ -184,7 +188,11 @@ export function createPersonalService(dependencies: PersonalDependencies) {
       const { path } = forgetInput.parse(args);
       const note = await memory.note(path, await turnChat(provenance.turnId));
       if (note === undefined)
-        throw new Error('This note is not one you saved. You can forget only your own notes.');
+        throw new Error(
+          (await memory.note(path)) === undefined
+            ? 'This note is no longer in memory.'
+            : 'This note was saved in another chat. You can forget only your own notes.',
+        );
       return { path, note };
     }
     const { quote, ...change } = args;

@@ -11,7 +11,7 @@ export function PageHeader({ path }: { path: string }) {
     <header className="chat-header page-header">
       <div className="chat-header-copy">
         <h1>{item.label}</h1>
-        <p>{subtitles[path] ?? 'Settings'}</p>
+        {subtitles[path] && <p>{subtitles[path]}</p>}
       </div>
     </header>
   );

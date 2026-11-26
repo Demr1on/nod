@@ -3,7 +3,7 @@
 }
 .settings-page {
   position: absolute;
-  inset: 0;
+  inset: var(--desktop-titlebar-height, 0px) 0 0;
   z-index: 21;
   display: flex;
   min-width: 0;

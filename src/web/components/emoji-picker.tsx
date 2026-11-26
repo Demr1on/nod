@@ -25,9 +25,11 @@ export const EmojiCatalog = lazy(async () => {
     default: function Catalog({
       onSelect,
       autoFocus = true,
+      skinTones = true,
     }: {
       onSelect(emoji: string, name: string): void;
       autoFocus?: boolean;
+      skinTones?: boolean;
     }) {
       const theme = useSyncExternalStore(subscribeTheme, currentTheme, () => 'light');
       return (
@@ -38,7 +40,7 @@ export const EmojiCatalog = lazy(async () => {
           height="100%"
           categoryIcons={categoryIcons}
           autoFocusSearch={autoFocus}
-          skinTonesDisabled
+          skinTonesDisabled={!skinTones}
           searchPlaceholder="Search emoji"
           previewConfig={{ showPreview: false }}
           categories={[

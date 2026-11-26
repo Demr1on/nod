@@ -186,7 +186,6 @@ export function BotNav({
   unread,
   onNavigate,
   onSettings,
-  onOpenPanel,
 }: {
   bots: Bot[];
   activity?: Activity[];
@@ -200,7 +199,6 @@ export function BotNav({
   unread(bot: Bot): boolean;
   onNavigate(path: string): void;
   onSettings(): void;
-  onOpenPanel(id: string): void;
 }) {
   const known = useRef<Set<string> | null>(null);
   const [fresh, setFresh] = useState<Set<string>>(new Set());
@@ -415,7 +413,7 @@ async function uploadAvatar(dataUrl: string) {
 
 function resizedImage(file: File) {
   return new Promise<string>((resolve, reject) => {
-    if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type))
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type))
       return reject(new Error('Choose a PNG, JPG or WebP image.'));
     const url = URL.createObjectURL(file);
     const image = new Image();
@@ -492,7 +490,11 @@ function AvatarMenu({
       {tab === 'emoji' ? (
         <div className="avatar-catalog">
           <Suspense fallback={<Loading />}>
-            <EmojiCatalog autoFocus={false} onSelect={(emoji) => !busy && save(emoji)} />
+            <EmojiCatalog
+              autoFocus={false}
+              skinTones={false}
+              onSelect={(emoji) => !busy && save(emoji)}
+            />
           </Suspense>
         </div>
       ) : (
@@ -664,6 +666,7 @@ function NameField({ bot }: { bot: Bot }) {
     if (!editing.current) setValue(bot.name);
   }, [bot.name]);
   function commit() {
+    if (!editing.current) return setValue(bot.name);
     editing.current = false;
     const next = value.replace(/\s+/g, ' ').trim();
     if (!next || next === bot.name) return setValue(bot.name);
@@ -704,13 +707,20 @@ function ProfileField({ bot, field }: { bot: Bot; field: 'job' | 'instructions' 
       saved.current = bot[field];
     }
   }, [bot[field]]);
+  const latest = useRef(value);
   function save(next: string) {
     clearTimeout(timer.current);
+    timer.current = undefined;
     if (next.trim() === saved.current.trim()) return;
     saved.current = next;
     void changeBot(bot.id, { [field]: next }).catch((cause) => toast(errorMessage(cause)));
   }
-  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(
+    () => () => {
+      if (timer.current) save(latest.current);
+    },
+    [],
+  );
   const props = {
     className: field === 'job' ? 'panel-role' : 'input',
     value,
@@ -718,6 +728,7 @@ function ProfileField({ bot, field }: { bot: Bot; field: 'job' | 'instructions' 
     onChange: (event: { target: { value: string } }) => {
       const next = event.target.value;
       setValue(next);
+      latest.current = next;
       clearTimeout(timer.current);
       timer.current = setTimeout(() => save(next), 700);
     },

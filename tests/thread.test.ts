@@ -12403,6 +12403,16 @@ test(
         { chat: penny },
       );
       assert.deepEqual(await owners(), { 'Lives in Barcelona.': 'nod' });
+      await assert.rejects(
+        memory.edit(
+          (tree) => {
+            tree.entries[0]!.text = 'Lives in Madrid.';
+          },
+          { chat: penny },
+        ),
+        /another chat/,
+      );
+      assert.deepEqual(await owners(), { 'Lives in Barcelona.': 'nod' });
       billPath = await memory.add(bill, penny);
       await assert.rejects(memory.forget(home, undefined, penny), /only your own notes/);
       await assert.rejects(memory.forget(billPath, undefined, null), /only your own notes/);

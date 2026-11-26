@@ -512,7 +512,7 @@ export function createTasks(options: {
       if (request.retry && ids.size !== 1) throw failure('A retry must name one task.');
       await own([...ids]);
       for (const id of ids) await deliver(client, id, sourceMessageId, turn.turnId, request.retry);
-      return { tasks: await read(client) };
+      return { tasks: (await read(client)).filter(sameChat) };
     }
     if (request.action === 'stop') {
       if (current.task_id) throw failure('Use finish to close your own task.');

@@ -124,6 +124,10 @@ function Workspace({
   );
   const [mainTools, setMainTools] = useState<HTMLDivElement | null>(null);
   const [pendingMessageFocus, setPendingMessageFocus] = useState(initialFocusMessageId);
+  const [botFocus, setBotFocus] = useState<{ botId: string; messageId: string }>();
+  useEffect(() => {
+    if (botFocus && path !== botPath(botFocus.botId)) setBotFocus(undefined);
+  }, [path]);
   useEffect(() => {
     if (initialFocusMessageId) onFocusMessageHandled();
   }, [initialFocusMessageId]);
@@ -187,23 +191,28 @@ function Workspace({
     setNotificationTarget(undefined);
     if (notificationTarget && notificationTarget.threadId !== state?.threadId) return;
     const botId = notificationTarget?.botId;
-    navigate(botId ? botPath(botId) : '/');
+    if (botId) {
+      setBotFocus({ botId, messageId: notificationTarget.messageId });
+      return navigate(botPath(botId));
+    }
+    navigate('/');
     if (notificationTarget)
-      window.setTimeout(
-        () =>
-          window.dispatchEvent(
-            new CustomEvent('nod:focus-message', {
-              detail: { messageId: notificationTarget.messageId, ...(botId ? { botId } : {}) },
-            }),
-          ),
-        botId ? 300 : 0,
+      window.setTimeout(() =>
+        window.dispatchEvent(
+          new CustomEvent('nod:focus-message', {
+            detail: { messageId: notificationTarget.messageId },
+          }),
+        ),
       );
   }, [notificationTarget, state]);
   useEffect(() => {
     const focusMessage = (event: Event) => {
       const detail = (event as CustomEvent<{ messageId?: unknown; botId?: unknown }>).detail;
       if (typeof detail?.messageId !== 'string') return;
-      if (typeof detail.botId === 'string') return navigate(botPath(detail.botId));
+      if (typeof detail.botId === 'string') {
+        setBotFocus({ botId: detail.botId, messageId: detail.messageId });
+        return navigate(botPath(detail.botId));
+      }
       if (!state) setPendingMessageFocus(detail.messageId);
       navigate('/');
     };
@@ -264,10 +273,6 @@ function Workspace({
             unread={(bot) => chatUnread(bot, chatCursors)}
             onNavigate={navigate}
             onSettings={() => navigate(lastSettings.current)}
-            onOpenPanel={(id) => {
-              navigate(botPath(id));
-              setPanelOpen(true);
-            }}
           />
         }
         panelHidden={panelHidden}
@@ -333,6 +338,7 @@ function Workspace({
               <BotChat
                 key={openBot.id}
                 bot={openBot}
+                focusMessageId={botFocus?.botId === openBot.id ? botFocus.messageId : undefined}
                 ownerId={ownerId}
                 state={state}
                 streams={streams}

@@ -183,7 +183,7 @@ export async function deliverBrowserNotification(
   canDeliver: () => boolean = () => true,
   botId?: string,
 ) {
-  const key = `nod.browser-notifications.last.${JSON.stringify([ownerId, threadId])}`;
+  const key = `nod.browser-notifications.last.${JSON.stringify(botId ? [ownerId, threadId, botId] : [ownerId, threadId])}`;
   const eligible = () =>
     isCurrent() &&
     canDeliver() &&

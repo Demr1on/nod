@@ -121,7 +121,22 @@ export function createMemoryService(options: {
     const known = new Set(tree.entries.map(pathOf));
     const taken = new Set(others.map(pathOf));
     const archived = new Set(othersArchived.map((entry) => `${pathOf(entry)}@${entry.archived}`));
+    const before = new Map(others.map((entry) => [pathOf(entry), JSON.stringify(entry)]));
+    const filed = new Set(tree.archive.map((entry) => `${pathOf(entry)}@${entry.archived}`));
     const result = change(tree);
+    const edited = tree.entries.some((entry) => {
+      const previous = before.get(pathOf(entry));
+      return previous !== undefined && previous !== JSON.stringify(entry);
+    });
+    if (
+      edited ||
+      tree.archive.some(
+        (entry) => before.has(pathOf(entry)) && !filed.has(`${pathOf(entry)}@${entry.archived}`),
+      )
+    )
+      throw new Error(
+        'That note was saved in another chat. You can change only your own notes. Nothing was saved.',
+      );
     tree.entries = [
       ...others,
       ...tree.entries

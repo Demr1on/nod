@@ -105,7 +105,7 @@ export function createBots(options: {
       `SELECT b.id,b.name,b.job,b.instructions,b.avatar,b.model,b.created_at,t.status,q.text AS question,
          last.role AS last_role,last.text AS last_text,latest.id AS latest_id,latest.created_at AS latest_at
        FROM bots b
-       LEFT JOIN LATERAL (SELECT u.id,u.status FROM turns u WHERE u.owner_id=b.owner_id AND u.session_id=b.id
+       LEFT JOIN LATERAL (SELECT u.id,u.status FROM turns u WHERE u.owner_id=b.owner_id AND u.bot_id=b.id
          ORDER BY u.created_at DESC,u.id DESC LIMIT 1) t ON true
        LEFT JOIN LATERAL (SELECT m.text FROM messages m WHERE t.status='waiting' AND m.owner_id=b.owner_id
          AND m.turn_id=t.id AND m.role='assistant' AND m.hidden_at IS NULL AND m.text<>''
@@ -274,7 +274,7 @@ export function createBots(options: {
         void options
           .clearBrowser?.(browser)
           ?.catch((error) => logFailure('bot_retire_failed', error));
-      void retire();
+      void retire().catch((error) => logFailure('bot_retire_failed', error));
     });
   }
 

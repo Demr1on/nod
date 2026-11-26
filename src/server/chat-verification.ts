@@ -262,8 +262,9 @@ export async function createChatVerification(
       if (!requests.rowCount) {
         if (requestId) throw conflict(unavailableMessage);
         const waiting = (
-          await client.query<{ kind: 'otp' | 'payment'; channel: string }>(
-            `SELECT r.kind,u.channel FROM ${codeRequests} r JOIN turns u ON u.id=r.turn_id
+          await client.query<{ kind: 'otp' | 'payment'; channel: string; elsewhere: boolean }>(
+            `SELECT r.kind,u.channel,u.bot_id IS DISTINCT FROM $9::uuid AS elsewhere
+             FROM ${codeRequests} r JOIN turns u ON u.id=r.turn_id
              WHERE r.owner_id=$1 AND u.owner_id=$1 AND (u.channel=$2 OR r.kind='payment') AND r.thread_id=$3
                AND r.status='pending'
                AND (u.status IN ('queued','running','waiting')
@@ -273,7 +274,7 @@ export async function createChatVerification(
                  `newer.created_at>u.created_at AND (NOT $7::boolean OR newer.created_at<now()-interval '10 minutes')`,
                )})
                AND ((r.kind='payment' AND ($4::boolean OR ($8::boolean AND u.channel=$2))) OR (r.kind='otp' AND $5::boolean))
-               AND u.bot_id IS NOT DISTINCT FROM $9::uuid LIMIT 1`,
+             LIMIT 1`,
             [
               options.ownerId,
               channel,
@@ -291,11 +292,13 @@ export async function createChatVerification(
         ).rows[0];
         if (waiting)
           throw conflict(
-            waiting.kind === 'payment'
-              ? waiting.channel !== channel
-                ? 'Open the secure payment link in Nod. Nod did not use this code.'
-                : 'Send just the card’s security code.'
-              : unavailableMessage,
+            waiting.kind === 'payment' && waiting.channel !== channel
+              ? 'Open the secure payment link in Nod. Nod did not use this code.'
+              : waiting.elsewhere
+                ? 'Send this code in the chat that asked for it. Nod did not use it.'
+                : waiting.kind === 'payment'
+                  ? 'Send just the card’s security code.'
+                  : unavailableMessage,
           );
         await input.persistOrdinary?.(client);
         return;

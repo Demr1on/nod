@@ -450,6 +450,11 @@ export function BotModel({ bot, onError }: { bot: Bot; onError(message: string):
           .catch((cause) => onError(errorMessage(cause)));
       }}
     >
+      {!own && (
+        <option value="" disabled>
+          Model unavailable
+        </option>
+      )}
       {own && !choices.some((choice) => choice.key === value) && (
         <option value={value}>{modelOf(data, own)?.name ?? unavailableLabel}</option>
       )}
@@ -465,5 +470,5 @@ export function BotModel({ bot, onError }: { bot: Bot; onError(message: string):
 export function NodModelName() {
   const models = useModels();
   const data = models.data;
-  return <>{(data && modelOf(data, data.selection)?.name) ?? '…'}</>;
+  return <>{data ? (modelOf(data, data.selection)?.name ?? 'Model unavailable') : '…'}</>;
 }

@@ -1134,13 +1134,18 @@ export function createSchedules(dependencies: ScheduleDependencies) {
       );
   }
 
-  async function duplicate(client: PoolClient, input: ReturnType<typeof validateCreate>) {
+  async function duplicate(
+    client: PoolClient,
+    input: ReturnType<typeof validateCreate>,
+    turnId: string | null,
+  ) {
     await lockKey(client, `schedules:${ownerId}`);
     return (
       await client.query<ScheduleRow>(
         `SELECT ${columns} FROM schedules WHERE owner_id=$1 AND enabled AND kind=$2
            AND cron IS NOT DISTINCT FROM $3 AND run_at IS NOT DISTINCT FROM $4::timestamptz AND time_zone=$5
            AND watch IS NOT DISTINCT FROM $8::jsonb
+           AND bot_id IS NOT DISTINCT FROM (SELECT u.bot_id FROM turns u WHERE u.id=$9::uuid AND u.owner_id=$1)
            AND (lower(btrim(title))=lower(btrim($6)) OR prompt=$7) ORDER BY created_at LIMIT 1`,
         [
           ownerId,
@@ -1151,6 +1156,7 @@ export function createSchedules(dependencies: ScheduleDependencies) {
           input.title,
           input.prompt,
           input.watch ? JSON.stringify(input.watch) : null,
+          turnId,
         ],
       )
     ).rows[0];
@@ -1163,7 +1169,7 @@ export function createSchedules(dependencies: ScheduleDependencies) {
       await sourceProvenance(client, provenance);
       assertChange(provenance, input);
       const authorized = await authority(client, input, provenance);
-      const existing = provenance && (await duplicate(client, input));
+      const existing = provenance && (await duplicate(client, input, provenance.turnId ?? null));
       if (existing) {
         const updated = input.model
           ? (

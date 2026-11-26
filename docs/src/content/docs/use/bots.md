@@ -19,7 +19,7 @@ You can also ask Nod or any bot in chat, for example "Make me a bot called Penny
 
 Open a bot in the sidebar and write in its chat. Its questions, approvals and answers stay in that chat. A bot can start [tasks](/use/tasks/) and [schedules](/use/schedules/) like Nod, and their results come back to its chat. A dot marks new messages, and a pink dot marks a bot that needs you.
 
-Bots don't hand work to each other. To ask a bot for something, write in its chat.
+Bots don't hand work to each other. To ask a bot for something, write in its chat. `/clear` works in Nod's chat only.
 
 ## What each bot owns
 

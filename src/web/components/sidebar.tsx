@@ -12,7 +12,7 @@ export function Sidebar({
 }: {
   nav: React.ReactNode;
   panelHidden?: boolean;
-  onToggle(animate: boolean): void;
+  onToggle(): void;
   onNavigate(path: string): void;
 }) {
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -45,7 +45,7 @@ export function Sidebar({
       event.preventDefault();
       event.stopPropagation();
       if (action.type === 'sidebar') {
-        if (window.innerWidth > 760) toggle.current(false);
+        if (window.innerWidth > 760) toggle.current();
         return;
       }
       navigate.current(action.path);
@@ -67,7 +67,7 @@ export function Sidebar({
   }, [mac]);
   return (
     <>
-      <aside className="sidebar" aria-label="Sidebar" inert={panelHidden}>
+      <aside className="sidebar" aria-label="Sidebar">
         {nav}
       </aside>
       {panelHidden && (
@@ -80,7 +80,7 @@ export function Sidebar({
             type="button"
             className="sidebar-show"
             aria-label="Show sidebar"
-            onClick={() => onToggle(true)}
+            onClick={() => onToggle()}
           >
             <PanelLeftOpen size={16} aria-hidden="true" />
           </button>

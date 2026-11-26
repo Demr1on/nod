@@ -48,16 +48,16 @@ export function createHistorySearch({
     if (around) {
       const { rows } = await pool.query<HistoryMessage>(
         `WITH target AS (
-           SELECT m.created_at,m.id FROM messages m WHERE m.id=$2 AND m.owner_id=$1 AND m.hidden_at IS NULL AND ${activeThreadSql('m')}
+           SELECT m.created_at,m.id,m.bot_id FROM messages m WHERE m.id=$2 AND m.owner_id=$1 AND m.hidden_at IS NULL AND ${activeThreadSql('m')}
            UNION ALL
-           (SELECT m.created_at,m.id FROM turns u JOIN messages m ON m.turn_id=u.id AND m.owner_id=u.owner_id AND m.thread_id=u.thread_id
+           (SELECT m.created_at,m.id,m.bot_id FROM turns u JOIN messages m ON m.turn_id=u.id AND m.owner_id=u.owner_id AND m.thread_id=u.thread_id
             WHERE u.id=$2 AND u.owner_id=$1 AND ${activeThreadSql('u')} AND m.hidden_at IS NULL
             ORDER BY m.created_at,m.id LIMIT 1)),
-         hit AS (SELECT created_at,id FROM target LIMIT 1),
+         hit AS (SELECT created_at,id,bot_id FROM target LIMIT 1),
          nearby AS (
-           (SELECT m.* FROM messages m,hit WHERE m.owner_id=$1 AND m.hidden_at IS NULL AND ${activeThreadSql('m')} AND (m.created_at,m.id)<(hit.created_at,hit.id) ORDER BY m.created_at DESC,m.id DESC LIMIT 5)
+           (SELECT m.* FROM messages m,hit WHERE m.owner_id=$1 AND m.hidden_at IS NULL AND ${activeThreadSql('m')} AND m.bot_id IS NOT DISTINCT FROM hit.bot_id AND (m.created_at,m.id)<(hit.created_at,hit.id) ORDER BY m.created_at DESC,m.id DESC LIMIT 5)
            UNION ALL (SELECT m.* FROM messages m,hit WHERE m.id=hit.id)
-           UNION ALL (SELECT m.* FROM messages m,hit WHERE m.owner_id=$1 AND m.hidden_at IS NULL AND ${activeThreadSql('m')} AND (m.created_at,m.id)>(hit.created_at,hit.id) ORDER BY m.created_at,m.id LIMIT 5))
+           UNION ALL (SELECT m.* FROM messages m,hit WHERE m.owner_id=$1 AND m.hidden_at IS NULL AND ${activeThreadSql('m')} AND m.bot_id IS NOT DISTINCT FROM hit.bot_id AND (m.created_at,m.id)>(hit.created_at,hit.id) ORDER BY m.created_at,m.id LIMIT 5))
          SELECT id,role,CASE WHEN id=(SELECT id FROM hit) THEN text ELSE left(text,6000) END AS text,
            id<>(SELECT id FROM hit) AND length(text)>6000 AS shortened,turn_id,created_at,
            COALESCE((SELECT b.name FROM bots b WHERE b.id=nearby.bot_id AND b.owner_id=$1),'Nod') AS chat

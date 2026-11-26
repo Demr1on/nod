@@ -538,6 +538,14 @@ test(
         await reply(`call: nod {"action":"schedule_pause","args":{"id":"${water!.id}"}}`),
         /belongs to another chat/,
       );
+      await nod.send('schedule: water the plants', { botId: pip.id });
+      await nod.settle();
+      assert.deepEqual(
+        await nod.query(
+          "SELECT bot_id FROM schedules WHERE title='water the plants' ORDER BY created_at",
+        ),
+        [{ bot_id: scout.id }, { bot_id: pip.id }],
+      );
       const nodMessage = (await nod.state()).messages.find(({ role }) => role === 'user')!;
       assert.match(
         await reply(`call: send_message {"text":"hi","replyToMessageId":"${nodMessage.id}"}`),
@@ -576,19 +584,10 @@ test(
       await assert.rejects(nod.send('are you there?', { botId: scout.id }), /404/);
       await assert.rejects(nod.api('DELETE', '/api/bots/nod'), /400/);
       await assert.rejects(nod.api('POST', '/api/bots', { name: ' NOD ', model }), /409/);
-      for (let i = 0; i < 50; i++) {
-        const [row] = await nod.query<{ retired: boolean }>(
-          'SELECT retired_at IS NOT NULL AS retired FROM bots WHERE id=$1',
-          [scout.id],
-        );
-        if (row?.retired) break;
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-      assert.deepEqual(
-        await nod.query('SELECT retired_at IS NOT NULL AS retired FROM bots WHERE id=$1', [
-          scout.id,
-        ]),
-        [{ retired: true }],
+      await nod.until(
+        async () =>
+          (await nod.query('SELECT 1 FROM bots WHERE id=$1 AND retired_at IS NOT NULL', [scout.id]))
+            .length > 0,
       );
       assert.deepEqual(await nod.query('SELECT id FROM schedules WHERE bot_id=$1', [scout.id]), []);
     });

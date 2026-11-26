@@ -1,4 +1,4 @@
-import { transaction } from './transaction.ts';
+import { transaction, afterCommit } from './transaction.ts';
 import { mkdir } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { basename, join } from 'node:path';
@@ -1660,13 +1660,13 @@ async function initializeApplication(
         ? withTurnLock(turnLock, async (client) => {
             if (action === 'NOD_bot_create') {
               const id = await bots.create(client, botCreate.parse(args));
-              refresh();
+              afterCommit(client, refresh);
               return { id, name: (await bots.get(client, id)).name };
             }
             const id = z.uuid().parse(args.id);
             const { id: _id, ...change } = args;
             await bots.update(client, id, botChange.parse(change));
-            refresh();
+            afterCommit(client, refresh);
             const { avatar: _avatar, ...updated } = await bots.get(client, id);
             return updated;
           })

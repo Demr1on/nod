@@ -102,8 +102,9 @@ export function useBrowserNotifications(ownerId: string, state: AppState | null)
       ),
     );
     const previous = botReplies.current;
+    if (previous && !preferences) return;
     botReplies.current = latest;
-    if (!previous || !preferences || !browserNotificationStatus(ownerId).enabled) return;
+    if (!previous || !browserNotificationStatus(ownerId).enabled) return;
     const consentGeneration = scope.consentGeneration;
     const isCurrent = () =>
       scope.active &&

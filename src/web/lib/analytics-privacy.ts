@@ -33,7 +33,6 @@ export function analyticsRoute(value: string) {
         '/settings/notifications',
         '/settings/voice',
         '/settings/privacy',
-        '/settings/bots',
       ].includes(path)
     )
       return '/settings';

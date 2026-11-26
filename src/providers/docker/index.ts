@@ -217,10 +217,7 @@ export function createCommandWorkspace(options: {
     ...(options.retireBot
       ? {
           retireBot: (threadId: string, bot: BotAccount) =>
-            supervise(async () => {
-              await options.retireBot!(threadIdentity(threadId), botAccount(bot));
-              return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 0 };
-            }).then(() => undefined),
+            options.retireBot!(threadIdentity(threadId), botAccount(bot)),
         }
       : {}),
     dispose: async () => {
