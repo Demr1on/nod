@@ -7,14 +7,13 @@ import {
 import type { Message } from '../../shared/contracts';
 import { errorMessage } from '../lib/api';
 import { analyticsForCurrentSession, observeAnalyticsView } from '../lib/analytics';
-import { ArrowUp, Check, PenLine } from './icons';
+import { Check, PenLine } from './icons';
 
 export interface AnswerChoicesProps {
   choices: AnswerChoicesValue;
   question: { id: string; text: string };
   title: ReactNode;
   disabled?: boolean;
-  optionsOnCard?: boolean;
   onAnswer(text: string, answer: QuestionAnswer): Promise<boolean | 'unavailable'>;
 }
 
@@ -49,7 +48,6 @@ export function AnswerChoices({
   question,
   title,
   disabled = false,
-  optionsOnCard = false,
   onAnswer,
 }: AnswerChoicesProps) {
   const id = useId();
@@ -160,8 +158,7 @@ export function AnswerChoices({
         )}
       </div>
       <div className="choice-card-list" role="group" aria-labelledby={`${id}-question`}>
-        {optionsOnCard && <p className="choice-card-count">Tap one above, or type your own</p>}
-        {(optionsOnCard ? [] : options).map((option, index) => {
+        {options.map((option, index) => {
           const on = selected.includes(option.id);
           return (
             <button
@@ -190,14 +187,14 @@ export function AnswerChoices({
           );
         })}
         <div className="choice-card-row choice-card-input">
-          <ChoiceBadge on={Boolean(typed) && (multiple || optionsOnCard)}>
+          <ChoiceBadge on={Boolean(typed)}>
             <PenLine size={14} />
           </ChoiceBadge>
           <input
             className="answer-choices-write"
             value={text}
             maxLength={4000}
-            placeholder={optionsOnCard ? 'Something else' : 'Type your own answer'}
+            placeholder="Type your own answer"
             aria-label="Type your own answer"
             readOnly={locked}
             onChange={(event) => {
@@ -210,41 +207,23 @@ export function AnswerChoices({
               finish();
             }}
           />
-          {optionsOnCard && (
-            <button
-              type="button"
-              className="answer-choices-send choice-card-send"
-              aria-label="Send answer"
-              aria-hidden={!typed || undefined}
-              tabIndex={typed ? undefined : -1}
-              data-idle={!typed || undefined}
-              aria-disabled={locked}
-              onClick={finish}
-            >
-              <ArrowUp size={16} />
-            </button>
-          )}
         </div>
       </div>
-      {(!optionsOnCard || error) && (
-        <div className="choice-card-footer">
-          {error && (
-            <p className="choice-card-error" role="alert">
-              {error}
-            </p>
-          )}
-          {!optionsOnCard && (
-            <button
-              type="button"
-              className="answer-choices-done choice-card-done"
-              aria-disabled={locked || !count}
-              onClick={finish}
-            >
-              Send
-            </button>
-          )}
-        </div>
-      )}
+      <div className="choice-card-footer">
+        {error && (
+          <p className="choice-card-error" role="alert">
+            {error}
+          </p>
+        )}
+        <button
+          type="button"
+          className="answer-choices-done choice-card-done"
+          aria-disabled={locked || !count}
+          onClick={finish}
+        >
+          Send
+        </button>
+      </div>
     </section>
   );
 }

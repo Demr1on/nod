@@ -7,7 +7,7 @@ import {
   mapTileSize,
   type Presentation,
 } from '../../shared/presentation';
-import { AlertCircle, Check, ChevronDown, ExternalLink, Send } from './icons';
+import { AlertCircle, Check, ChevronDown, ExternalLink, LockKeyhole, Send } from './icons';
 
 export interface CardPick {
   chosen: number[];
@@ -20,11 +20,6 @@ export interface CardPick {
 }
 
 export const CardPickContext = createContext<CardPick | null>(null);
-
-function useCardPick() {
-  const pick = useContext(CardPickContext);
-  return pick?.closed ? null : pick;
-}
 
 export function CardPickSend({
   placeholder = 'Something else',
@@ -40,7 +35,10 @@ export function CardPickSend({
   if (pick?.closed)
     return (
       <div className="card-band card-pick-send" data-closed>
-        <p className="card-pick-closed">This choice has closed</p>
+        <p className="card-pick-closed">
+          <LockKeyhole size={13} aria-hidden="true" />
+          Read only · this choice has closed
+        </p>
         {children}
       </div>
     );
@@ -199,7 +197,7 @@ function Picture({
 const pictured = (item: Item) => Boolean(item.image && typeof item.image === 'object');
 
 function Tiles({ visual }: { visual: Visual<'items'> }) {
-  const pick = useCardPick();
+  const pick = useContext(CardPickContext);
   const located = visual.items.every((item) => item.location) ? (visual.items as Located[]) : null;
   const [selected, setSelected] = useState(0);
   const gallery = visual.items.some(pictured);
@@ -211,6 +209,7 @@ function Tiles({ visual }: { visual: Visual<'items'> }) {
       <ul
         className="card-tiles"
         data-settled={pick?.sent || undefined}
+        data-closed={pick?.closed || undefined}
         data-count={visual.items.length % 3 === 0 || visual.items.length === 5 ? 3 : 2}
         data-pictured={gallery || undefined}
       >
@@ -306,7 +305,7 @@ function List({ visual }: { visual: Visual<'items'> }) {
   const located = visual.items.every((item) => item.location) ? (visual.items as Located[]) : null;
   const [open, setOpen] = useState<number | null>(null);
   const [selected, setSelected] = useState(0);
-  const pick = useCardPick();
+  const pick = useContext(CardPickContext);
   const dots = visual.items.some((item) => item.status);
   const pinned = Boolean(located && located.length > 1);
   const gutter = pick ? 'choice' : dots ? 'dot' : pinned || visual.ranked ? 'index' : undefined;
@@ -323,6 +322,7 @@ function List({ visual }: { visual: Visual<'items'> }) {
         data-gutter={gutter}
         data-pictured={pictured || undefined}
         data-settled={pick?.sent || undefined}
+        data-closed={pick?.closed || undefined}
       >
         {visual.items.map((item, index) => {
           const expandable = Boolean(item.detail || item.facts || item.journeys);
@@ -743,7 +743,7 @@ export function FactList({ visual }: { visual: Visual<'facts'> }) {
 export function Compare({ visual }: { visual: Visual<'compare'> }) {
   const winner = visual.winner;
   const columns = visual.columns.map(compareColumn);
-  const pick = useCardPick();
+  const pick = useContext(CardPickContext);
   return (
     <>
       {visual.verdict && <p className="card-band card-verdict">{visual.verdict}</p>}
@@ -753,6 +753,7 @@ export function Compare({ visual }: { visual: Visual<'compare'> }) {
             className="card-compare"
             data-columns={visual.columns.length}
             data-settled={pick?.sent || undefined}
+            data-closed={pick?.closed || undefined}
           >
             <thead>
               <tr>
