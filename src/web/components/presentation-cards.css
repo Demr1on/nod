@@ -73,9 +73,27 @@
   border-color: var(--ring);
 }
 .card-pick-closed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
   color: var(--muted-foreground);
   font-size: 13px;
+}
+:is(.card-tiles, .card-items)[data-closed] li,
+.card-compare[data-closed] thead th {
+  opacity: 0.6;
+}
+.card-tiles[data-closed] .card-tile,
+.card-items[data-gutter='choice'][data-closed] > li,
+.card-compare[data-closed] .card-contender {
+  border-style: dashed;
+  background: transparent;
+}
+:is(.card-tiles, .card-items, .card-compare)[data-closed] .card-radio {
+  border-style: dashed;
+  border-color: var(--border);
+  background: var(--surface-subtle);
 }
 .card-pick-send .choice-card-done {
   display: inline-flex;
