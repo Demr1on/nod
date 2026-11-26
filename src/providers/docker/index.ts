@@ -216,8 +216,17 @@ export function createCommandWorkspace(options: {
     connectedCliAvailable: Boolean(options.runConnectedCommand),
     ...(options.retireBot
       ? {
-          retireBot: (threadId: string, bot: BotAccount) =>
-            options.retireBot!(threadIdentity(threadId), botAccount(bot)),
+          retireBot: async (threadId: string, bot: BotAccount) => {
+            if (disposed)
+              throw new Error('The workspace is unavailable. Restart Nod before continuing.');
+            const operation = options.retireBot!(threadIdentity(threadId), botAccount(bot));
+            pending.add(operation);
+            try {
+              await operation;
+            } finally {
+              pending.delete(operation);
+            }
+          },
         }
       : {}),
     dispose: async () => {

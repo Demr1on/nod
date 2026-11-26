@@ -502,7 +502,7 @@ function AvatarMenu({
           <label>
             <input
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/webp"
               hidden
               onChange={(event) => {
                 const file = event.target.files?.[0];
@@ -786,8 +786,8 @@ export function BotPanel({ bot, onClose }: { bot?: Bot; onClose(): void }) {
           <div className="panel-identity-text">
             {bot ? (
               <>
-                <NameField bot={bot} />
-                <ProfileField bot={bot} field="job" />
+                <NameField key={bot.id} bot={bot} />
+                <ProfileField key={bot.id} bot={bot} field="job" />
               </>
             ) : (
               <>
@@ -813,7 +813,7 @@ export function BotPanel({ bot, onClose }: { bot?: Bot; onClose(): void }) {
                   <span>Instructions</span>
                 </div>
                 <div className="panel-row-body">
-                  <ProfileField bot={bot} field="instructions" />
+                  <ProfileField key={bot.id} bot={bot} field="instructions" />
                 </div>
               </div>
             </div>

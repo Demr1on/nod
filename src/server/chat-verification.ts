@@ -274,7 +274,7 @@ export async function createChatVerification(
                  `newer.created_at>u.created_at AND (NOT $7::boolean OR newer.created_at<now()-interval '10 minutes')`,
                )})
                AND ((r.kind='payment' AND ($4::boolean OR ($8::boolean AND u.channel=$2))) OR (r.kind='otp' AND $5::boolean))
-             LIMIT 1`,
+             ORDER BY elsewhere,u.created_at DESC,r.id LIMIT 1`,
             [
               options.ownerId,
               channel,
