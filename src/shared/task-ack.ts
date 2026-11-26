@@ -116,13 +116,22 @@ function conflictingPolarity(text: string, start: string) {
 }
 
 export function resemblesTaskAcknowledgement(text: string, start: string, handoff = false) {
+  const trimmed = text.trim();
   const status =
-    /^(?:(?:sure|ok(?:ay)?)[,.!\s]+)?(?:on it\b|i(?:['’]ll| will)\b|i(?:['’]m| am)\s+(?:going|working|starting)\b|i(?:['’]ve| have)\s+started\b|started\b|working\b)/iu.test(
-      text.trim(),
+    /^(?:(?:sure|ok(?:ay)?|got it|alright|right)[,.!\s]+)?(?:on it\b|i(?:['’]ll| will)\b|i(?:['’]m| am)\s+(?:going|working|starting|looking|checking|on|pulling|gathering|digging|searching|drafting|setting)\b|i(?:['’]ve| have)\s+started\b|let me\b|looking\b|checking\b|starting\b|working\b|pulling\b|gathering\b|searching\b)/iu.test(
+      trimmed,
     );
+  const shortLine = trimmed.length <= 160 && !/[?\n]|https?:\/\//iu.test(trimmed);
+  const hasMoney = /[€$£]/u.test(trimmed);
   return (
-    !/[\p{N}€$£\n]|https?:\/\//iu.test(text) &&
-    !conflictingPolarity(text, start) &&
-    (status ? overlap(text, start, 0.45, 0.4, 3) : handoff && nearDuplicate(text, start))
+    !hasMoney &&
+    !/\n|https?:\/\//iu.test(trimmed) &&
+    !conflictingPolarity(trimmed, start) &&
+    (status
+      ? (!/\p{N}/u.test(trimmed) && overlap(trimmed, start, 0.45, 0.4, 3)) ||
+        (shortLine && overlap(trimmed, start, 0.3, 0.2, 2))
+      : handoff
+        ? nearDuplicate(trimmed, start) || (shortLine && overlap(trimmed, start, 0.4, 0.3, 2))
+        : false)
   );
 }

@@ -61,7 +61,7 @@ const input = z.discriminatedUnion('action', [
       action: z.literal('start'),
       title: z.string().trim().min(1),
       key: z.string().trim().min(1).max(200).optional(),
-      message: z.string().trim().min(1),
+      message: z.string().trim().min(1).optional(),
       doneWhen: z.string().trim().min(1),
       now: now.optional(),
       brief: z.string().trim().min(1).optional(),
@@ -565,14 +565,15 @@ export function createTasks(options: {
               )
             ).rows[0]
           : undefined;
+      const startMessage = request.message ?? request.now ?? request.title;
       const messageId = current.proactive
         ? null
-        : prior && resemblesTaskAcknowledgement(prior.text, request.message, priorHandoff)
+        : prior && resemblesTaskAcknowledgement(prior.text, startMessage, priorHandoff)
           ? prior.id
           : await insertAssistantMessage(
               client,
               turn,
-              request.message,
+              startMessage,
               [],
               undefined,
               sourceMessageId &&
@@ -599,7 +600,7 @@ export function createTasks(options: {
           request.title,
           request.doneWhen,
           request.brief ?? request.doneWhen,
-          request.now ?? request.message,
+          request.now ?? startMessage,
           JSON.stringify(request.steps ?? []),
           JSON.stringify(request.waitingFor ?? []),
           request.nextCheck ?? null,

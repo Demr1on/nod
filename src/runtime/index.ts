@@ -354,6 +354,16 @@ export function createAgentRuntime(dependencies: {
         .replace(/<\/?(?:invoke|parameter|function_calls|antml:[a-z_]+)\b[^>]*>/gi, '')
         .replace(/[\u200b\ufeff]+$/g, '')
         .trim();
+    const words = (text: string) => new Set(text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
+    const restates = (text: string, earlier: string) => {
+      if (text === earlier) return true;
+      if (!earlier) return false;
+      const [a, b] = [words(text), words(earlier)];
+      if (Math.min(a.size, b.size) < 12) return false;
+      let shared = 0;
+      for (const word of a) if (b.has(word)) shared++;
+      return shared / Math.max(a.size, b.size) >= 0.85;
+    };
     const deliverReply = async (
       text: string,
       id?: string,
@@ -367,7 +377,7 @@ export function createAgentRuntime(dependencies: {
       const outcome: ReplyDelivery['presentation'] = presentation ? 'original' : 'none';
       if (
         (!trimmed && !visual) ||
-        (trimmed === lastReply && (!visual || visual === lastPresentation))
+        (restates(trimmed, lastReply) && (!visual || visual === lastPresentation))
       )
         return { delivered: false, presentation: outcome };
       if (handoff) await context.reply(trimmed, id, replyToMessageId, presentation, true);
@@ -1377,7 +1387,9 @@ export function createAgentRuntime(dependencies: {
             if (event.status === 'incomplete')
               modelIncomplete = event.contextExhausted ? 'context' : 'output';
             flushText();
-            const handsOff = event.beforeTool === 'task' && !context.taskContext;
+            const handsOff =
+              !context.taskContext &&
+              (event.beforeTool === 'task' || (event.beforeTool === 'skills' && !spoke));
             const text = streamSubmitted || stopped || handsOff ? '' : streamedText.trim();
             if (
               text &&

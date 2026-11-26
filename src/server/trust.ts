@@ -279,7 +279,7 @@ export function createTrust(options: {
       return { confirm: false, basis, ...revision, ...instructionChange };
     }
     if (
-      ['schedule', 'event'].includes(origin.source) &&
+      (['schedule', 'event'].includes(origin.source) || origin.scheduledResume) &&
       (answer as { run?: unknown } | undefined)?.run !== false
     )
       throw new Error(

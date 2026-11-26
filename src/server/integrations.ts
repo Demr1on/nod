@@ -3128,7 +3128,11 @@ export async function createIntegrations(pool: Pool, options: IntegrationOptions
               ...connection
             }) => ({
               ...connection,
-              ...(connection.browserState ? { browserAccess: 'browser_session' } : {}),
+              ...(connection.browserState
+                ? { browserAccess: 'browser_session' }
+                : connection.savedLogin
+                  ? { browserAccess: 'sign_in_saved_login' }
+                  : {}),
             }),
           );
         const logins = connections.filter((connection) => connection.savedLogin);

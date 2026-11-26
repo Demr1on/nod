@@ -267,23 +267,79 @@ const flightReferences = z.looseObject({
     .min(1)
     .max(8),
 });
+const clip = (value: unknown, max: number) =>
+  typeof value === 'string' && value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value;
+const coerceStatus = (value: unknown) => {
+  if (typeof value !== 'string') return value;
+  const label = value.trim();
+  if (!label) return undefined;
+  const lower = label.toLowerCase();
+  const tone = /fail|error|block|refus|declin|cancel|reject|overdue|missed/.test(lower)
+    ? 'failed'
+    : /done|paid|sent|confirm|approv|complet|resolv|deliver|closed|settled/.test(lower)
+      ? 'done'
+      : /wait|pend|open|hold|schedul|review|progress/.test(lower)
+        ? 'waiting'
+        : 'new';
+  return { label: clip(label, 40) as string, tone };
+};
+const safeHttpsUrl = (value: unknown) =>
+  typeof value === 'string' && Boolean(previewableUrl(value)?.startsWith('https://'))
+    ? value
+    : undefined;
 const normalizePresentationInput = (value: unknown) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
   const record = { ...(value as Record<string, unknown>) };
   if (!('sources' in record)) record.sources = [];
   else if (Array.isArray(record.sources)) {
-    record.sources = record.sources.filter(
-      (entry) =>
-        entry &&
-        typeof entry === 'object' &&
-        typeof (entry as { url?: unknown }).url === 'string' &&
-        Boolean(previewableUrl((entry as { url: string }).url)?.startsWith('https://')),
-    );
+    record.sources = record.sources
+      .filter(
+        (entry): entry is Record<string, unknown> =>
+          Boolean(entry) &&
+          typeof entry === 'object' &&
+          !Array.isArray(entry) &&
+          typeof (entry as { label?: unknown }).label === 'string' &&
+          Boolean((entry as { label: string }).label.trim()) &&
+          Boolean(safeHttpsUrl((entry as { url?: unknown }).url)),
+      )
+      .slice(0, 10)
+      .map((entry) => ({
+        label: clip((entry.label as string).trim(), 80),
+        url: entry.url,
+      }));
   }
-  if (typeof record.status === 'string' && record.status.trim())
-    record.status = { label: record.status.trim().slice(0, 40), tone: 'new' };
-  if (typeof record.note === 'string' && record.note.length > 220)
-    record.note = `${record.note.slice(0, 219).trimEnd()}…`;
+  if (typeof record.title === 'string') record.title = clip(record.title.trim(), 120);
+  if (typeof record.caption === 'string') record.caption = clip(record.caption.trim(), 300);
+  if (typeof record.status === 'string') {
+    const coerced = coerceStatus(record.status);
+    if (coerced) record.status = coerced;
+    else delete record.status;
+  }
+  if (typeof record.note === 'string') record.note = clip(record.note.trim(), 220);
+  if (typeof record.verdict === 'string') record.verdict = clip(record.verdict.trim(), 240);
+  if (Array.isArray(record.items)) {
+    record.items = record.items.map((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+      const item = { ...(entry as Record<string, unknown>) };
+      if (typeof item.title === 'string') item.title = clip(item.title.trim(), 120);
+      if (typeof item.sub === 'string') item.sub = clip(item.sub.trim(), 160);
+      if (typeof item.badge === 'string') item.badge = clip(item.badge.trim(), 24);
+      if (Array.isArray(item.tags))
+        item.tags = item.tags
+          .filter((tag): tag is string => typeof tag === 'string' && Boolean(tag.trim()))
+          .slice(0, 3)
+          .map((tag) => clip(tag.trim(), 24));
+      if (typeof item.detail === 'string')
+        item.detail = clip(item.detail.trim(), record.type === 'schedule' ? 180 : 360);
+      if (typeof item.status === 'string') {
+        const coerced = coerceStatus(item.status);
+        if (coerced) item.status = coerced;
+        else delete item.status;
+      }
+      if ('url' in item && !safeHttpsUrl(item.url)) delete item.url;
+      return item;
+    });
+  }
   return record;
 };
 TypeRegistry.Set(
@@ -369,7 +425,7 @@ export const toolDefinitions = {
   ),
   send_message: defineTool(
     'send_message',
-    'Deliver a checked result, decision or task handoff. A partial result must stand alone. intent "final" completes the request, ends the turn and settles a task without task finish; "handoff" acknowledges right before starting a task; omit or "update" continues. Prefer presentation over Markdown lists or tables (plain text for short replies, single facts or text-only requests). Base: {version:1, type, title, sources:[{label,url}], asOf?, caption?}. Core types: items {items:[{title, sub?, value?, valueSub?, status?:{label,tone:"new"|"waiting"|"done"|"failed"}, detail?, facts?:[{label,value}], url?, location?:{latitude,longitude}}], label?, note?, pick?:{question,multiple?}}; compare {columns(2..4), rows:[{label, values(2..4), best?:0..3 column index, amounts?}], verdict?, note?, pick?}; schedule {items:[{start, end?, title, detail?, quiet?, clash?}], note?}; facts {items:[{label, value, strong?}], status?, note?}; flights {options:[{id, recommended?, label?}], pick?}. Keep fields concise (no raw slot dumps or notes repeating title). For seats, diagram, image or apps, read skills {action:"read",name:"visual-replies"}. Add pick {question} only when the turn cannot finish until the owner chooses (omit intent "final"; never on a recommendation, comparison, brief or brainstorm). Keep text to caveats, recommendation or links not in the card; empty if self-contained. No delivery recaps. Background final text stays private.',
+    'Deliver a checked result, decision or task handoff. A partial result must stand alone. intent "final" completes the request, ends the turn and settles a task without task finish; "handoff" acknowledges right before starting a task; omit or "update" continues. Prefer presentation over Markdown lists/tables for short results (use share_file for longer reports/guides); plain text for short replies. Base: {version:1, type, title, sources:[{label,url}], asOf?}. items {items:[{title, sub?, badge?, tags?, value?, valueSub?, status?:{label,tone:"new"|"waiting"|"done"|"failed"}, detail?, facts?, url?, location?}], ranked?, note?, pick?:{question,multiple?}}. compare {columns:[{label,sub?}], rows:[{label, values, best?, amounts?}], winner?, verdict?, pick?}. facts {stats?:[{label,value,sub?}], items?:[{label,value,strong?}], status?}. schedule {items:[{day?, start, end?, title, detail?, quiet?}]}. flights {options:[{id, recommended?}], pick?}. Other types: skills read visual-replies. Add pick {question} only when the turn cannot finish until the owner chooses (omit intent "final"; never on a recommendation, comparison, brief or brainstorm). Keep text to caveats, recommendation or links not in the card; empty if self-contained. No delivery recaps. Background final text stays private.',
     Type.Object({
       text: Type.String(),
       presentation: Type.Optional(presentation),
@@ -553,7 +609,7 @@ export const toolDefinitions = {
   ),
   browser_session: defineTool(
     'browser_session',
-    'Manage private browser profiles. connect {url,label?} opens a new profile. use {url,connectionId} opens a saved one after the sign-in trust check; inspect the page to check access. save {url,connectionId,signedIn:true} records a checked sign-in on that origin. Public pages need only browser open.',
+    'Manage private browser profiles (browserAccess:"browser_session" in manage_apps list; for savedLogin:true Vault logins, use browser + sign_in with savedLoginId). connect {url,label?} opens a new profile. use {url,connectionId} opens a saved one after sign-in trust check. save {url,connectionId,signedIn:true} records a checked sign-in. Public pages need only browser open.',
     Type.Union([
       Type.Object(
         {
@@ -726,7 +782,7 @@ export const toolDefinitions = {
           action: Type.Literal('start'),
           title: Type.String({ minLength: 1 }),
           key: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
-          message: Type.String({ minLength: 1 }),
+          message: Type.Optional(Type.String({ minLength: 1 })),
           request: Type.Optional(uuid),
           doneWhen: Type.String({ minLength: 1 }),
           now: Type.Optional(taskNow),
@@ -774,7 +830,7 @@ export const toolDefinitions = {
   ),
   share_file: defineTool(
     'share_file',
-    'Attach a workspace file to your next reply, or deliver it on its own when no reply follows. Check the file first and share each file once.',
+    'Attach a workspace file to your next reply, or deliver it on its own. Prefer Markdown via share_file for reusable reports, guides or playbooks. Check first and share once.',
     Type.Object({
       path: Type.String(),
       name: Type.Optional(Type.String()),

@@ -3984,6 +3984,43 @@ test('send_message validates structured visuals and delivers each distinct prese
         ['new', 'waiting', 'done'],
       );
     });
+  await t.test('closing text that restates a sent answer is not posted again', async (t) => {
+    const replies: Array<Parameters<RuntimeContext['reply']>> = [];
+    const sent =
+      'Synthetic total is about 2,286 units. These use the latest synthetic reference figures from yesterday, and two other feeds agree within a small margin. Your provider will add its own markup, so expect a little less.';
+    const restated =
+      'Synthetic total is about 2,286 units. These use the latest synthetic reference figures from yesterday, and two other feeds agree within a small margin. Your provider will add its own fee, so expect a bit less.';
+    const runtime = createAgentRuntime({
+      agent: {
+        open: async (input) => ({
+          resumed: false,
+          abort() {},
+          dispose() {},
+          prompt: async () => {
+            const send = input.tools.find((tool) => tool.name === 'send_message')!;
+            await send.execute({ text: sent });
+            input.onEvent({ type: 'final', text: restated });
+          },
+        }),
+        dispose() {},
+      },
+      computer: fakeComputer(),
+      workspace: fakeWorkspace(),
+    });
+    t.after(() => runtime.dispose());
+    const result = await runtime.runTurn({
+      ...context(directory),
+      turnId: randomUUID(),
+      reply: async (...args) => {
+        replies.push(args);
+      },
+    });
+    assert.equal(result.status, 'succeeded');
+    assert.deepEqual(
+      replies.map((reply) => reply[0]),
+      [sent],
+    );
+  });
   await t.test('a card to pick from asks with its rows as answer choices', async (t) => {
     const replies: Array<Parameters<RuntimeContext['reply']>> = [];
     const row = (index: number) => ({ title: `Option ${index}`, value: `€${index}0` });
@@ -4016,7 +4053,10 @@ test('send_message validates structured visuals and delivers each distinct prese
               presentation: {
                 ...items,
                 pick,
-                items: [1, 2].map(row),
+                items: [
+                  { ...row(1), status: 'Overdue', url: 'http://127.0.0.1/private' },
+                  { ...row(2), status: 'Paid', detail: 'd'.repeat(400) },
+                ],
                 note: 'a'.repeat(250),
                 sources: [
                   { label: 'Public', url: 'https://news.ycombinator.com/item?id=1' },
@@ -4043,6 +4083,12 @@ test('send_message validates structured visuals and delivers each distinct prese
     assert.equal(replies.length, 1);
     assert.equal(replies[0][3]?.type, 'items');
     assert.equal(replies[0][3]?.note?.length, 220);
+    if (replies[0][3]?.type === 'items') {
+      assert.deepEqual(replies[0][3].items[0]?.status, { label: 'Overdue', tone: 'failed' });
+      assert.equal(replies[0][3].items[0]?.url, undefined);
+      assert.deepEqual(replies[0][3].items[1]?.status, { label: 'Paid', tone: 'done' });
+      assert.equal(replies[0][3].items[1]?.detail?.length, 360);
+    }
     assert.deepEqual(replies[0][3]?.sources, [
       { label: 'Public', url: 'https://news.ycombinator.com/item?id=1' },
     ]);
