@@ -2,6 +2,8 @@ type UiPreference =
   | 'nod.side-panel'
   | 'nod.chat-layout'
   | 'nod.artifact-width'
+  | 'nod.trace-open'
+  | 'nod.trace-width'
   | `nod.feedback.discovery.${string}`
   | `nod.feedback.report.${string}`;
 

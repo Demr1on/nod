@@ -167,7 +167,7 @@ export function createMemoryService(options: {
       throw new Error('The complete current owned user message is required.');
   }
 
-  async function control(raw: unknown, chat: string | null = null) {
+  async function control(raw: unknown, chat?: string | null) {
     const input = controlInput.parse(raw);
     const capture = snapshotAnalytics(options.analytics);
     const mark = await watermark();

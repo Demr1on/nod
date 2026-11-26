@@ -161,9 +161,17 @@ import { createChannels } from './channels.ts';
 import { createChannelSettings, managedChannelEnvironment } from './channel-settings.ts';
 import { createChannelMedia } from './channel-media.ts';
 import { createChannelSessionStore } from './channel-session.ts';
-import { configuration, dataRoot, desktopMode, ownerId, publicOrigin } from './config.ts';
+import {
+  configuration,
+  dataRoot,
+  desktopMode,
+  developmentMode,
+  ownerId,
+  publicOrigin,
+} from './config.ts';
 import { createAccountStore } from './account-store.ts';
 import { createModelTraces, type ModelTraceGate } from './traces.ts';
+import { createTurnTraces } from './turn-traces.ts';
 import { runtimeAccount } from './account-profile.ts';
 import { createAccountSession } from './account.ts';
 import { connectedGmail } from '../shared/onboarding.ts';
@@ -403,6 +411,12 @@ export function createDefaultAdapters(
     }),
     env.NOD_APP_VERSION,
   );
+  const captureOnly = {
+    active: () => false,
+    record: () => {},
+    capturing: () => traces.capturing(),
+    capture: (...args: Parameters<typeof traces.capture>) => traces.capture(...args),
+  };
   const modelCurator = createPiMemoryCurator({
     get provider() {
       return models.current.provider;
@@ -634,6 +648,7 @@ export function createDefaultAdapters(
       },
       resolve: () => models.resolveClassification(true),
       configured: () => models.hasClassificationModel(true),
+      traces: captureOnly,
     }),
     classificationCurator: createPiMemoryCurator({
       get provider() {
@@ -641,6 +656,7 @@ export function createDefaultAdapters(
       },
       resolve: () => models.resolveClassification(),
       configured: () => models.hasClassificationModel(),
+      traces: captureOnly,
     }),
     imageCurator: createPiMemoryCurator({
       get provider() {
@@ -696,6 +712,8 @@ export function createDefaultAdapters(
     },
   };
 }
+
+const devTools = developmentMode && !desktopMode;
 
 function alternativeModel(models: ApplicationAdapters['models']) {
   const view = models?.view();
@@ -2551,11 +2569,15 @@ async function initializeApplication(
               ids,
             )
             .finally(() => {
+              const due = () => proactivity.due();
               void admission
-                .run(() => proactivity.due())
+                .run(() => (adapters.traces ? adapters.traces.outsideTurn(due) : due()))
                 ?.catch((error) => logFailure('proactivity_wake', error));
             });
-        return adapters.traces?.withTurn({ turnId, sessionId }, observe) ?? observe();
+        const traces = adapters.traces;
+        return traces
+          ? traces.captureTurn(turnId, () => traces.withTurn({ turnId, sessionId }, observe))
+          : observe();
       },
       consumers,
       artifacts,
@@ -3478,6 +3500,7 @@ async function initializeApplication(
     verification: chatVerification,
     taskLedger: tasks.read,
     bots: { list: () => bots.list() },
+    forgetLearned: devTools ? async () => void (await memory.control({ clear: true })) : undefined,
     activity: activity.current,
     planningTasks: onboardingSuggestions.planning,
     computer,
@@ -3540,12 +3563,20 @@ async function initializeApplication(
     analytics: captureAnalytics,
   });
   registerPrivacyNotice(app, privacyNotice);
+  const developerIds = desktopMode ? new Set<string>() : new Set([ownerId]);
+  const turnTraceIds = devTools ? developerIds : new Set<string>();
+  if (turnTraceIds.has(ownerId)) {
+    const turnTraces = createTurnTraces({ pool, ownerId });
+    turnTraces.registerRoutes(app);
+    adapters.traces?.configure({ capture: turnTraces.record });
+  }
   createAccountSession({
     analytics,
     model: () => adapters.model,
     accounts: localAccounts,
     localUser: { id: ownerId, name: 'You', email: null, avatarUrl: null },
-    developerIds: desktopMode ? new Set() : new Set([ownerId]),
+    developerIds,
+    turnTraceIds,
     start: welcome,
     prepare: prepareRuntime,
     onboardingMissing: async () => (adapters.model.configured ? null : 'brain'),
@@ -3793,6 +3824,15 @@ async function initializeApplication(
       () => runtime.dispose(),
       () => ledger.flush(),
       () => artifacts.close(),
+      () => {
+        const seconds = process.uptime();
+        captureAnalytics({
+          event: 'runtime_stopped',
+          properties: {
+            uptime: seconds < 3600 ? 'under_1h' : seconds < 86_400 ? 'under_1d' : 'over_1d',
+          },
+        });
+      },
       () => analytics.shutdown(),
       () => adapters.telemetry?.shutdown(),
       () => diagnostics.log?.close(),

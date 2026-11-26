@@ -112,7 +112,9 @@ function Workspace({
   settings: ReactNode;
   onReturnToMemory?(): void;
 }) {
-  const { state, streams, error, connected, refresh } = useAppState(session.user!.id);
+  const { state, streams, error, connected, refresh, resetConversation } = useAppState(
+    session.user!.id,
+  );
   const unread = useChatUnread(session.user!.id, state);
   useBrowserNotifications(session.user!.id, state);
   useSavedDateFormat();
@@ -291,6 +293,12 @@ function Workspace({
               )}
               {state ? (
                 <Chat
+                  turnTraces={session.capabilities.turnTraces === true}
+                  onReset={
+                    session.capabilities.turnTraces === true
+                      ? (threadId) => resetConversation(threadId, true)
+                      : undefined
+                  }
                   ownerId={ownerId}
                   state={mainState!}
                   streams={mainStreams}

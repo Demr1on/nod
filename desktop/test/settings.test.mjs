@@ -706,6 +706,7 @@ async function runningDesktop(
     fileURLToPath,
     pathToFileURL,
     homedir,
+    uptime: () => 7200,
     mkdir,
     appendFile: appendDiagnostic,
     readFile: (file, ...args) =>
@@ -1280,12 +1281,16 @@ test('fresh packaged Welcome captures one bounded opening and preserves an uncer
           assert.equal(opening.openedAt, new Date(event.timestamp).getTime());
           assert.equal(opening.entry, 'native_setup');
           assert.equal(opening.serverConnectionTelemetryAvailable, true);
+          assert.equal(opening.loginItem, undefined);
+          assert.equal(opening.sinceBoot, undefined);
           assert.deepEqual(await take(engineEvent, true, event.distinct_id), opening);
           await take(engineEvent, false, null);
           const enabledAt = Date.now();
           const resumed = await take(engineEvent, true, event.distinct_id);
           assert.equal(resumed.entry, 'app_ui');
           assert.equal(resumed.serverConnectionTelemetryAvailable, undefined);
+          assert.equal(resumed.loginItem, 'not_registered');
+          assert.equal(resumed.sinceBoot, 'over_1h');
           assert.ok(resumed.openedAt >= enabledAt);
           assert.notEqual(resumed.uuid, event.uuid);
         }

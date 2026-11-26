@@ -198,6 +198,84 @@ test(
         }
       },
     );
+    await t.test('dev turn traces stay owner-scoped and keep secrets out', async () => {
+      const { createTurnTraces } = await import('../src/server/turn-traces.ts');
+      const { createModelTraces } = await import('../src/server/traces.ts');
+      const currentThread = (await thread.activeThread()).id;
+      const otherOwner = 'synthetic-other-owner';
+      const mine = randomUUID();
+      const theirs = randomUUID();
+      const secret = 'fixture-model-key-5d21';
+      const nested = 'hunter2hunter2-private';
+      await db.pool.query(
+        `INSERT INTO turns(id,owner_id,thread_id,source,prompt,status)
+         VALUES($1,$3,$4,'user','hi','done'),($2,$5,$4,'user','hi','done')`,
+        [mine, theirs, ownerId, currentThread, otherOwner],
+      );
+      try {
+        const own = createTurnTraces({ pool: db.pool, ownerId });
+        const other = createTurnTraces({ pool: db.pool, ownerId: otherOwner });
+        const traces = createModelTraces();
+        traces.configure({ secrets: [secret], capture: own.record });
+        const call = (turnId: string) => ({
+          id: randomUUID(),
+          source: 'agent',
+          turnId,
+          provider: 'fixture',
+          model: 'fixture-model',
+          startedAt: '2026-11-25T10:00:00.000Z',
+          endedAt: '2026-11-25T10:00:01.000Z',
+          systemPrompt: `You are Nod. Key ${secret}`,
+          tools: [
+            {
+              name: 'read',
+              description: 'Read a file',
+              parameters: { type: 'object', default: { apiKey: nested } },
+            },
+          ],
+          messages: [
+            { role: 'user', content: JSON.stringify({ password: { value: nested } }) },
+            { role: 'user', content: `use ${secret}`, apiKey: secret },
+          ],
+          output: { content: [{ type: 'text', text: 'done' }], stopReason: 'stop' },
+          usage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            costUsd: null,
+          },
+          stopReason: 'stop',
+        });
+        traces.capture(() => call(mine), mine);
+        traces.capture(() => call(theirs), theirs);
+        traces.withTurn({ sessionId: mine, turnId: mine }, () => traces.capture(() => call(mine)));
+        traces.captureTurn(mine, () => traces.outsideTurn(() => traces.capture(() => call(mine))));
+        traces.captureTurn(mine, () => traces.capture(() => call(mine)));
+        let found;
+        for (let attempt = 0; attempt < 40; attempt++) {
+          found = await own.read(mine);
+          if (found?.calls.length === 2) break;
+          await delay(10);
+        }
+        assert.equal(found?.calls.length, 2);
+        assert.equal(found?.calls[0]?.tools[0]?.name, 'read');
+        const stored = JSON.stringify(
+          (await db.pool.query('SELECT call FROM model_call_traces')).rows,
+        );
+        assert.ok(!stored.includes(secret));
+        assert.ok(!stored.includes(nested));
+        assert.equal(await own.read(theirs), undefined);
+        assert.equal((await other.read(theirs))?.calls.length, 0);
+        assert.equal(
+          (await db.pool.query('SELECT count(*)::int AS n FROM model_call_traces')).rows[0].n,
+          2,
+        );
+      } finally {
+        await db.pool.query('DELETE FROM turns WHERE id=ANY($1::uuid[])', [[mine, theirs]]);
+      }
+    });
     await thread.initializeThreads();
     await t.test('periodic checks use an installation-spread five-minute schedule', async () => {
       const { createWorkConsumers } = await import('../src/server/work-admission.ts');

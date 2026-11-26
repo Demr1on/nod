@@ -35,7 +35,7 @@ const providers = [
   {
     id: 'telegram' as const,
     name: 'Telegram',
-    description: 'Chat with Nod in Telegram.',
+    description: 'Message Nod in a private chat with your bot.',
   },
   {
     id: 'whatsapp' as const,
@@ -778,7 +778,9 @@ export function Channels() {
                 <img src="/logos/telegram.svg" alt="" width={24} height={24} />
                 {telegramStatus.paired ? 'Telegram' : 'Connect Telegram'}
               </DialogTitle>
-              <DialogDescription>Create a bot, then link your account.</DialogDescription>
+              <DialogDescription>
+                Nod replies only in your private chat with the bot, not in groups.
+              </DialogDescription>
               <TelegramSetup
                 setup={telegramSetup}
                 pairingUrl={pairingUrl}
