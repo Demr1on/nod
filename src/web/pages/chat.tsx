@@ -34,7 +34,6 @@ import { classifyVerificationReply, securityCodeIn } from '../../shared/verifica
 import { ChatTools } from '../components/chat-tools';
 import { ServiceLogo } from '../components/service-logo';
 import { Composer, type ComposerHandle, type ComposerSendResult } from '../components/composer';
-import { NodAvatar, BotAvatar } from '../components/bot-avatar';
 import type { Bot } from '../lib/bots';
 import { MessageBubble, WorkLabel, type MessageWork } from '../components/message';
 import { conversationFiles } from '../components/attachment-card';
@@ -995,7 +994,6 @@ export function Chat({
     )
     .join(';');
   const files = useMemo(() => conversationFiles(visibleMessages), [fileKey]);
-  const speaker = chat ? <BotAvatar name={chat.name} avatar={chat.avatar} /> : <NodAvatar />;
   const planning =
     state.planningTasks === true && !allMessages.some((message) => message.suggestions);
   const unseen = away
@@ -2436,7 +2434,6 @@ export function Chat({
                   ) : (
                     <MessageBubble
                       message={message}
-                      avatar={message.role === 'assistant' ? speaker : undefined}
                       speakerName={chat?.name}
                       replyFrom={message.replyTo?.role === 'assistant' ? chat?.name : undefined}
                       work={startedTask(message) ? undefined : workOf(message)}

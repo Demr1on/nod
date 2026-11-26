@@ -1,12 +1,13 @@
 import { useRef } from 'react';
 import { avatarUpload } from '../../shared/bots';
+import { BrandMark } from './brand';
 
 type Size = 'sm' | 'md' | 'lg';
 
 export function NodAvatar({ size = 'md' }: { size?: Size }) {
   return (
     <span className={`av av-${size} av-nod`} aria-hidden="true">
-      <i />
+      <BrandMark />
     </span>
   );
 }

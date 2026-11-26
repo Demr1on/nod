@@ -363,14 +363,12 @@ export function MessageBubble({
   work,
   task,
   replyFrom,
-  avatar,
   speakerName = 'Nod',
 }: {
   message: Message;
   work?: MessageWork;
   task?: ReactNode;
   replyFrom?: string;
-  avatar?: ReactNode;
   speakerName?: string;
   pendingAudio?: ImagePreview;
   connectedAppIds?: ReadonlySet<string>;
@@ -723,7 +721,7 @@ export function MessageBubble({
   return (
     <article
       ref={articleElement}
-      className={`message message-${message.role}${grouped ? ' message-grouped' : ''}${arriving ? ' message-arriving' : ''}${panel ? ' message-panel-open' : ''}${avatar ? ' message-with-avatar' : ''}`}
+      className={`message message-${message.role}${grouped ? ' message-grouped' : ''}${arriving ? ' message-arriving' : ''}${panel ? ' message-panel-open' : ''}`}
       aria-label={
         streaming ? `${speakerName} is responding` : message.role === 'user' ? 'You' : speakerName
       }
@@ -732,7 +730,6 @@ export function MessageBubble({
       onKeyUp={selectQuote}
       tabIndex={-1}
     >
-      {avatar && <span className="message-avatar">{avatar}</span>}
       <div className="message-content">
         {work && <WorkLabel work={work} />}
         {run && <ScheduleRunTrack run={run} />}

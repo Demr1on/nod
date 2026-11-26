@@ -14,8 +14,6 @@ export function BotChat({
   connected,
   refresh,
   visible,
-  panelOpen,
-  onTogglePanel,
   onNavigate,
   onRead,
   onFeedback,
@@ -28,8 +26,6 @@ export function BotChat({
   connected?: boolean;
   refresh(): Promise<void>;
   visible: boolean;
-  panelOpen: boolean;
-  onTogglePanel(): void;
   onNavigate(path: string): void;
   onRead(chatId: string, at: string): void;
   onFeedback?(): void;
@@ -61,10 +57,10 @@ export function BotChat({
   useEffect(() => {
     if (!visible) return;
     const leave = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || panelOpen) return;
+      if (event.key !== 'Escape') return;
       const busy = [
         ...document.querySelectorAll(
-          '[role="dialog"],[role="menu"],.artifact-drawer,.bot-chat-route :is(.composer-reply,.composer.has-recording)',
+          '[role="dialog"],[role="menu"],.artifact-drawer,.bot-chat-route :is(.composer-reply,.composer.has-recording),#bot-panel:not(.bot-panel-closing)',
         ),
       ].some((element) => element.getClientRects().length);
       if (busy) return;
@@ -74,7 +70,7 @@ export function BotChat({
     };
     window.addEventListener('keydown', leave, true);
     return () => window.removeEventListener('keydown', leave, true);
-  }, [visible, panelOpen, onNavigate]);
+  }, [visible, onNavigate]);
   const turnIds = new Set(
     (state.activity ?? []).filter((item) => item.botId === bot.id).map((item) => item.turnId),
   );
@@ -103,7 +99,7 @@ export function BotChat({
   );
   return (
     <div className="bot-chat-route chat-surface">
-      <ChatTop bot={bot} panelOpen={panelOpen} onTogglePanel={onTogglePanel} toolsRef={setTools} />
+      <ChatTop bot={bot} toolsRef={setTools} />
       {!page && failure && (
         <div className="initial-loading">
           <Notice>{failure}</Notice>

@@ -1,5 +1,7 @@
 import {
   Suspense,
+  createContext,
+  useContext,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -10,10 +12,10 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import type { Activity } from '../../shared/contracts';
-import { botInstructionsLimit, botJobLimit, botEmojis, botNameLimit } from '../../shared/bots';
+import { botInstructionsLimit, botEmojis, botNameLimit } from '../../shared/bots';
 import { api, errorMessage } from '../lib/api';
 import { botActivity, botLine, botPath, type Bot } from '../lib/bots';
-import { LockKeyhole, Plus, Settings, X } from './icons';
+import { Plus, Settings, X } from './icons';
 import { NodModelName, BotModel } from './model-choices';
 import { NodAvatar, BotAvatar } from './bot-avatar';
 import { LiveLine } from './live-line';
@@ -225,6 +227,11 @@ export function BotNav({
   const openMenu = (bot: Bot, point: { x: number; y: number }) => setMenu({ bot, point });
   return (
     <nav className="bot-nav" aria-label="Chats">
+      <div className="bot-top">
+        <Button variant="ghost" size="icon" aria-label="New bot" onClick={newBot}>
+          <Plus size={16} aria-hidden="true" />
+        </Button>
+      </div>
       <a
         href="/"
         className="bot-brand"
@@ -234,9 +241,7 @@ export function BotNav({
           .join(', ')}
         onClick={link('/')}
       >
-        <span className="bot-brand-mark" aria-hidden="true">
-          <span />
-        </span>
+        <NodAvatar />
         <span className="bot-meta">
           <span className="bot-name">Nod</span>
           <span className={`bot-sub${nodUnread ? ' bot-sub-unread' : ''}`}>
@@ -256,75 +261,60 @@ export function BotNav({
           <span className="bot-dot bot-dot-working" aria-hidden="true" />
         ) : null}
       </a>
-      <div className="bot-section">
-        <div className="bot-head">
-          <span>Bots</span>
-          <Button variant="ghost" size="icon" aria-label="New bot" onClick={newBot}>
-            <Plus size={16} aria-hidden="true" />
-          </Button>
-        </div>
-        {bots.length ? (
-          <ul className="bot-list">
-            {bots.map((bot) => {
-              const active = bot.id === activeId;
-              const isUnread = !active && unread(bot);
-              const live = botActivity(activity, bot.id);
-              return (
-                <li key={bot.id} className={fresh.has(bot.id) ? 'bot-fresh' : ''}>
-                  <a
-                    href={botPath(bot.id)}
-                    className="bot-item"
-                    aria-current={active ? 'page' : undefined}
-                    aria-label={[
-                      bot.name,
-                      bot.status === 'needs_you'
-                        ? 'needs you'
-                        : bot.status === 'working'
-                          ? 'working'
-                          : null,
-                      isUnread ? 'unread' : null,
-                    ]
-                      .filter(Boolean)
-                      .join(', ')}
-                    onClick={link(botPath(bot.id))}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      openMenu(bot, { x: event.clientX, y: event.clientY });
-                    }}
-                    onKeyDown={(event: KeyboardEvent) => {
-                      if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10'))
-                        return;
-                      event.preventDefault();
-                      const box = event.currentTarget.getBoundingClientRect();
-                      openMenu(bot, { x: box.left + 24, y: box.bottom });
-                    }}
-                  >
-                    <BotAvatar name={bot.name} avatar={bot.avatar} />
-                    <span className="bot-meta">
-                      <span className="bot-name">{bot.name}</span>
-                      <span className={`bot-sub${isUnread ? ' bot-sub-unread' : ''}`}>
-                        {bot.status === 'working' ? (
-                          <LiveLine item={live} history={false} />
-                        ) : (
-                          botLine(bot)
-                        )}
-                      </span>
+      {bots.length > 0 && (
+        <ul className="bot-list">
+          {bots.map((bot) => {
+            const active = bot.id === activeId;
+            const isUnread = !active && unread(bot);
+            const live = botActivity(activity, bot.id);
+            return (
+              <li key={bot.id} className={fresh.has(bot.id) ? 'bot-fresh' : ''}>
+                <a
+                  href={botPath(bot.id)}
+                  className="bot-item"
+                  aria-current={active ? 'page' : undefined}
+                  aria-label={[
+                    bot.name,
+                    bot.status === 'needs_you'
+                      ? 'needs you'
+                      : bot.status === 'working'
+                        ? 'working'
+                        : null,
+                    isUnread ? 'unread' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(', ')}
+                  onClick={link(botPath(bot.id))}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    openMenu(bot, { x: event.clientX, y: event.clientY });
+                  }}
+                  onKeyDown={(event: KeyboardEvent) => {
+                    if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10'))
+                      return;
+                    event.preventDefault();
+                    const box = event.currentTarget.getBoundingClientRect();
+                    openMenu(bot, { x: box.left + 24, y: box.bottom });
+                  }}
+                >
+                  <BotAvatar name={bot.name} avatar={bot.avatar} />
+                  <span className="bot-meta">
+                    <span className="bot-name">{bot.name}</span>
+                    <span className={`bot-sub${isUnread ? ' bot-sub-unread' : ''}`}>
+                      {bot.status === 'working' ? (
+                        <LiveLine item={live} history={false} />
+                      ) : (
+                        botLine(bot)
+                      )}
                     </span>
-                    <RowMarker bot={bot} unread={isUnread} />
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="bot-empty">
-            No bots yet.{' '}
-            <button type="button" onClick={newBot}>
-              Add one
-            </button>
-          </p>
-        )}
-      </div>
+                  </span>
+                  <RowMarker bot={bot} unread={isUnread} />
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      )}
       <div className="bot-foot">
         {sidebarItems
           .filter((item) => item.path !== '/')
@@ -367,15 +357,12 @@ export function BotNav({
 
 export function ChatTop({
   bot,
-  panelOpen,
-  onTogglePanel,
   toolsRef,
 }: {
   bot?: Bot;
-  panelOpen: boolean;
-  onTogglePanel(): void;
   toolsRef?(element: HTMLDivElement | null): void;
 }) {
+  const panel = useContext(PanelContext);
   const summary = bot ? bot.job || 'No job yet' : 'Your main assistant';
   return (
     <header className="chat-top">
@@ -383,10 +370,10 @@ export function ChatTop({
         <button
           type="button"
           className="chat-pill"
-          aria-expanded={panelOpen}
+          aria-expanded={panel.shown}
           aria-controls="bot-panel"
           title={summary}
-          onClick={onTogglePanel}
+          onClick={panel.toggle}
         >
           {bot ? (
             <BotAvatar name={bot.name} avatar={bot.avatar} size="sm" />
@@ -696,24 +683,24 @@ function NameField({ bot }: { bot: Bot }) {
   );
 }
 
-function ProfileField({ bot, field }: { bot: Bot; field: 'job' | 'instructions' }) {
-  const [value, setValue] = useState(bot[field]);
-  const saved = useRef(bot[field]);
+function InstructionsField({ bot }: { bot: Bot }) {
+  const [value, setValue] = useState(bot.instructions);
+  const saved = useRef(bot.instructions);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const focused = useRef(false);
   useEffect(() => {
     if (!focused.current) {
-      setValue(bot[field]);
-      saved.current = bot[field];
+      setValue(bot.instructions);
+      saved.current = bot.instructions;
     }
-  }, [bot[field]]);
+  }, [bot.instructions]);
   const latest = useRef(value);
   function save(next: string) {
     clearTimeout(timer.current);
     timer.current = undefined;
     if (next.trim() === saved.current.trim()) return;
     saved.current = next;
-    void changeBot(bot.id, { [field]: next }).catch((cause) => toast(errorMessage(cause)));
+    void changeBot(bot.id, { instructions: next }).catch((cause) => toast(errorMessage(cause)));
   }
   useEffect(
     () => () => {
@@ -721,36 +708,84 @@ function ProfileField({ bot, field }: { bot: Bot; field: 'job' | 'instructions' 
     },
     [],
   );
-  const props = {
-    className: field === 'job' ? 'panel-role' : 'input',
-    value,
-    onFocus: () => (focused.current = true),
-    onChange: (event: { target: { value: string } }) => {
-      const next = event.target.value;
-      setValue(next);
-      latest.current = next;
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => save(next), 700);
-    },
-    onBlur: () => {
-      focused.current = false;
-      save(value);
-    },
-  };
-  return field === 'job' ? (
-    <input {...props} aria-label="Job" placeholder="What it’s for" maxLength={botJobLimit} />
-  ) : (
+  return (
     <textarea
-      {...props}
+      className="input"
+      value={value}
       rows={3}
       aria-label="Instructions"
       placeholder="What should it always or never do?"
       maxLength={botInstructionsLimit}
+      onFocus={() => (focused.current = true)}
+      onChange={(event) => {
+        const next = event.target.value;
+        setValue(next);
+        latest.current = next;
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => save(next), 700);
+      }}
+      onBlur={() => {
+        focused.current = false;
+        save(value);
+      }}
     />
   );
 }
 
-export function BotPanel({ bot, onClose }: { bot?: Bot; onClose(): void }) {
+const PanelContext = createContext<{ shown: boolean; toggle(): void }>({
+  shown: false,
+  toggle() {},
+});
+
+export function PanelProvider({
+  path,
+  bot,
+  available,
+  children,
+}: {
+  path: string;
+  bot?: Bot;
+  available: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [leavingFrom, setLeavingFrom] = useState<string>();
+  const shown = open && available;
+  const close = () => {
+    if (shown) setLeavingFrom(path);
+    setOpen(false);
+  };
+  const toggle = () => {
+    if (shown) return close();
+    setLeavingFrom(undefined);
+    setOpen(true);
+  };
+  return (
+    <PanelContext.Provider value={{ shown, toggle }}>
+      {children}
+      {(shown || leavingFrom === path) && (
+        <BotPanel
+          bot={bot}
+          closing={!shown}
+          onClose={close}
+          onClosed={() => setLeavingFrom(undefined)}
+        />
+      )}
+    </PanelContext.Provider>
+  );
+}
+
+export function BotPanel({
+  bot,
+  closing,
+  onClose,
+  onClosed,
+}: {
+  bot?: Bot;
+  closing: boolean;
+  onClose(): void;
+  onClosed(): void;
+}) {
   useEffect(() => {
     const key = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
@@ -767,8 +802,13 @@ export function BotPanel({ bot, onClose }: { bot?: Bot; onClose(): void }) {
   return (
     <aside
       id="bot-panel"
-      className="bot-panel"
+      className={`bot-panel${closing ? ' bot-panel-closing' : ''}`}
       aria-label={bot ? `${bot.name} settings` : 'Nod settings'}
+      inert={closing}
+      onTransitionEnd={(event) => {
+        if (closing && event.target === event.currentTarget && event.propertyName === 'opacity')
+          onClosed();
+      }}
     >
       <div className="panel-head">
         <div className="panel-head-top">{close}</div>
@@ -785,10 +825,7 @@ export function BotPanel({ bot, onClose }: { bot?: Bot; onClose(): void }) {
           )}
           <div className="panel-identity-text">
             {bot ? (
-              <>
-                <NameField key={bot.id} bot={bot} />
-                <ProfileField key={bot.id} bot={bot} field="job" />
-              </>
+              <NameField key={bot.id} bot={bot} />
             ) : (
               <>
                 <h2>Nod</h2>
@@ -813,7 +850,7 @@ export function BotPanel({ bot, onClose }: { bot?: Bot; onClose(): void }) {
                   <span>Instructions</span>
                 </div>
                 <div className="panel-row-body">
-                  <ProfileField key={bot.id} bot={bot} field="instructions" />
+                  <InstructionsField key={bot.id} bot={bot} />
                 </div>
               </div>
             </div>
@@ -843,11 +880,8 @@ export function BotPanel({ bot, onClose }: { bot?: Bot; onClose(): void }) {
               </div>
             </div>
             <p className="panel-note">
-              <LockKeyhole size={14} aria-hidden="true" />
-              <span>
-                Nod can’t be renamed or removed. It holds your Vault, approvals and settings, and
-                every bot’s actions go through its trust check.
-              </span>
+              Nod can’t be renamed or removed. It holds your Vault, approvals and settings, and
+              every bot’s actions go through its trust check.
             </p>
           </>
         )}
