@@ -121,11 +121,8 @@ async function cardPictures(
     picture ? createHash('sha256').update(picture.bytes).digest('hex') : '',
   );
   const repeated = (key: string) => keys.filter((other) => other === key).length > 1;
-  const fallbacks = fetched.filter((picture, index) => picture && wanted[index]?.fallback).length;
   return fetched.map((picture, index) =>
-    picture && !(wanted[index]?.fallback && (fallbacks < 2 || repeated(keys[index]!)))
-      ? picture
-      : null,
+    picture && !(wanted[index]?.fallback && repeated(keys[index]!)) ? picture : null,
   );
 }
 
