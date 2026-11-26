@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isMessageReaction } from './emoji';
+import { isMessageReaction } from './emoji.ts';
 import type { ModelSelection } from './models';
 
 export const botEmojis = ['🧾', '🔭', '🍳', '🗓️', '✈️', '🏡', '🎓', '💪', '🧩'] as const;
