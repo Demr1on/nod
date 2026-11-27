@@ -81,9 +81,9 @@ export function TranscriptionServer({
         <DialogContent className="voice-connection-dialog" aria-describedby={`${id}-about`}>
           <DialogTitle>Transcription server</DialogTitle>
           <p className="field-hint" id={`${id}-about`}>
-            Nod sends voice messages to this server only, instead of a voice service or the model on
-            this device. It must accept OpenAI audio transcription requests, as a local Whisper
-            server does.
+            Nod transcribes voice messages with this server only, instead of a voice service or the
+            model on this device. It must accept OpenAI audio transcription requests, as a local
+            Whisper server does.
           </p>
           {connection && !editing && connection.status === 'connected' && (
             <p className="voice-connection-status" role="status">
