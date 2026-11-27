@@ -367,7 +367,7 @@
   display: none;
 }
 :root[data-desktop='true'] .chat-top {
-  top: 2px;
+  top: 8px;
   z-index: 21;
 }
 :root[data-desktop='true'] :is(.chat-pill, .chat-top-tools) {
@@ -378,7 +378,7 @@
   mask-image: linear-gradient(to bottom, transparent 0, black 40px);
 }
 :root[data-desktop='true'] .chat-surface .chat-page .conversation-scroll {
-  padding-top: 60px;
+  padding-top: 66px;
 }
 .chat-page .message-assistant .message-bubble > .message-body {
   border-radius: 16px 16px 16px 4px;
@@ -430,8 +430,13 @@
 .bot-panel.bot-panel-closing {
   transition-duration: 200ms;
 }
-:root[data-desktop='true'] .bot-panel {
-  padding-top: var(--desktop-titlebar-height);
+:root[data-desktop='true'] .panel-head {
+  padding-top: 14px;
+}
+:root[data-desktop='true'] .panel-head-top > button {
+  position: relative;
+  z-index: 21;
+  -webkit-app-region: no-drag;
 }
 .panel-head {
   display: flex;
