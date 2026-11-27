@@ -1050,7 +1050,7 @@ export async function submitUserMessage(
       !question &&
       !options.questionAnswer &&
       !options.approvalAnswer &&
-      sessionId === thread.id &&
+      sessionId === session &&
       !String(options.sourceId ?? '').startsWith('reaction-reply:');
     const startAfter = coalesce ? new Date(Date.now() + burstCoalesceMs) : null;
     await client.query(
@@ -2584,7 +2584,7 @@ async function executeTurn(turn: any, dependencies: ThreadDependencies) {
       burstCoalesceMs > 0 &&
       turn.source === 'user' &&
       !turn.background &&
-      turn.session_id === threadId
+      turn.session_id === (turn.bot_id ?? threadId)
     ) {
       const extra = await takeQueuedMessages(turnId, turn.session_id, turn.channel);
       if (extra.length) {
