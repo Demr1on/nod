@@ -348,6 +348,7 @@ export function createAgentRuntime(dependencies: {
     activeTurns.set(context.turnId, { abort, done });
     signal.addEventListener('abort', abort, { once: true });
 
+    const coordinator = !context.taskContext && !context.background && !context.proactivity;
     let taskResult = '';
     let screened = false;
     const speaks = !context.proactivity && (!context.background || Boolean(context.taskContext));
@@ -939,7 +940,6 @@ export function createAgentRuntime(dependencies: {
                     { additionalProperties: false },
                   )
                 : tool.parameters;
-            const coordinator = !context.taskContext && !context.background && !context.proactivity;
             const deferredByRole = coordinator && (name === 'computer' || name === 'files');
             const eager = Boolean(tool.eager && !deferredByRole);
             const deferred = (tool as Partial<Pick<AgentTool, 'deferred'>>).deferred;
@@ -951,7 +951,7 @@ export function createAgentRuntime(dependencies: {
               ...(tool.companions ? { companions: tool.companions } : {}),
               ...(deferred ? { deferred } : {}),
               parallel: Boolean(deferred) || parallelTools.has(name),
-              ...(name === 'send_message' ? { early: true } : {}),
+              ...(name === 'send_message' || name === 'react_to_message' ? { early: true } : {}),
               execute: async (params, options) => {
                 assertActive();
                 if (browserTools.has(name)) await take();
@@ -1371,7 +1371,9 @@ export function createAgentRuntime(dependencies: {
       const opening = agent.open({
         ...execution,
         ...(context.model ? { model: context.model } : {}),
-        ...(context.taskContext && !context.modelChosen ? { lighterEffort: true } : {}),
+        ...(!context.modelChosen && (context.taskContext || coordinator)
+          ? { lighterEffort: true }
+          : {}),
         automatic: Boolean(context.automatic),
         contextRestart: context.contextRestart,
         ...(context.proactivity ? { restricted: true } : {}),
