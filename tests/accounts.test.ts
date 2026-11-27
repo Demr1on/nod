@@ -4440,12 +4440,14 @@ describe('model connections', { skip: !process.env.TEST_DATABASE_URL }, () => {
         const url = String(input);
         asked.push(url);
         const key = new Headers(init?.headers).get('authorization');
+        assert.equal(init?.redirect, 'error');
         if (url === 'http://127.0.0.1:8765/models') return new Response('missing', { status: 404 });
         if (url === 'http://127.0.0.1:8765/v1/models')
           return key === `Bearer ${secret}`
             ? Response.json({ data: [] })
             : Response.json({ error: { message: `refused ${key}` } }, { status: 401 });
-        assert.equal(url, 'http://192.168.1.5:9000/v1/models');
+        if (url === 'http://192.168.1.9:9000/v1/models') return Response.json({ models: [] });
+        assert.match(url, /^http:\/\/192\.168\.1\.[5-7]:9000\/v1\/models$/);
         assert.equal(key, null);
         return Response.json({ data: [] });
       },
@@ -4484,6 +4486,17 @@ describe('model connections', { skip: !process.env.TEST_DATABASE_URL }, () => {
       type: 'endpoint',
       url: 'http://192.168.1.5:9000/v1',
     });
+    await assert.rejects(
+      owner.addTranscriptionServer('http://192.168.1.9:9000/v1'),
+      /invalid model list/,
+    );
+    await Promise.all([
+      owner.addTranscriptionServer('http://192.168.1.6:9000/v1'),
+      owner.addTranscriptionServer('http://192.168.1.7:9000/v1'),
+    ]);
+    assert.equal(owner.view().connections.length, 1);
+    assert.equal(owner.hasTranscriptionServer(), true);
+    await owner.addTranscriptionServer('http://192.168.1.5:9000/v1');
     const reloaded = await f.create('fixture-transcription-owner', backend);
     assert.equal((await reloaded.transcriptionServer())?.url, 'http://192.168.1.5:9000/v1');
     await reloaded.remove(id);

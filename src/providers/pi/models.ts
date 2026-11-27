@@ -288,7 +288,13 @@ export function createPiModelBackend(options: { fetch?: typeof fetch } = {}): Mo
       redirect: 'error',
       signal: AbortSignal.timeout(15000),
     });
-    if (response.ok) return void (await response.body?.cancel().catch(() => {}));
+    if (response.ok) {
+      const list = z
+        .object({ data: z.array(z.unknown()) })
+        .safeParse(await response.json().catch(() => undefined));
+      if (list.success) return;
+      throw new ModelAuthError('The transcription server returned an invalid model list.');
+    }
     throw new ModelAuthError(
       (
         await modelServiceError(response, 'The transcription server', [

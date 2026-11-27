@@ -44,22 +44,19 @@ export function createCompatibleTranscriptionProvider(options: {
         redirect: 'error',
         headers: server.key ? { Authorization: `Bearer ${server.key}` } : {},
         body,
-        signal: AbortSignal.any([AbortSignal.timeout(120_000), ...(signal ? [signal] : [])]),
+        signal,
       }).catch((error: unknown) => {
-        if (signal?.aborted || (error instanceof Error && error.name === 'TimeoutError'))
-          throw error;
+        if (signal?.aborted) throw error;
         throw new SpeechProviderError(
           'Your transcription server did not answer. Check that it is running.',
         );
       });
       const result = JSON.parse(
         (
-          await readSpeechResponse(
-            response,
-            1024 * 1024,
-            'Your transcription server',
-            server.key ? [server.key] : [],
-          )
+          await readSpeechResponse(response, 1024 * 1024, 'Your transcription server', [
+            server.url,
+            server.key ?? '',
+          ])
         ).toString(),
       ) as { text?: unknown };
       if (typeof result.text !== 'string') throw new Error('Voice transcription failed.');

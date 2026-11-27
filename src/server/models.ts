@@ -917,11 +917,13 @@ export function createModelService(options: {
       replace = false,
       status = 'connected',
       signal,
+      single = false,
     }: {
       managed?: boolean;
       replace?: boolean;
       status?: ModelRecord['status'];
       signal?: AbortSignal;
+      single?: boolean;
     } = {},
   ) {
     remember(value);
@@ -932,16 +934,18 @@ export function createModelService(options: {
     if (status === 'connected' && !definitions.length && !modelProviderInfo[provider].speechOnly)
       throw new ConnectionError('This connection has no supported models.');
     const saved = await store.change((state) => {
+      const same = (row: (typeof state.connections)[number]) =>
+        single
+          ? row.provider === provider && !row.managed
+          : sameAccount(row, provider, method, value);
       const previous = state.connections.find((row) =>
-        id ? row.id === id : !managed && sameAccount(row, provider, method, value),
+        id ? row.id === id : !managed && same(row),
       );
       if (replace && !previous)
         throw new ConnectionError('This model connection was removed. Start a new connection.');
       const duplicates = managed
         ? []
-        : state.connections.filter(
-            (row) => row !== previous && sameAccount(row, provider, method, value),
-          );
+        : state.connections.filter((row) => row !== previous && same(row));
       if (!previous && state.connections.length - duplicates.length >= 80)
         throw new ConnectionError('Remove an unused model connection before adding another.');
       const working = status === 'loading' && previous?.status === 'connected';
@@ -1579,13 +1583,7 @@ export function createModelService(options: {
           connected = { ...value, url: `${url}/v1` };
           await catalog('compatible-speech', 'api_key', connected);
         }
-        return save(
-          'compatible-speech',
-          'api_key',
-          connected,
-          [],
-          rows.find((row) => row.provider === 'compatible-speech' && !row.managed)?.id,
-        );
+        return save('compatible-speech', 'api_key', connected, [], undefined, { single: true });
       });
     },
     async select(input: ModelSelection, actor: SettingActor = 'owner', client?: PoolClient) {

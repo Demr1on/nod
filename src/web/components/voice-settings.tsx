@@ -367,7 +367,7 @@ export function VoiceSettings({ onBusyChange }: { onBusyChange(busy: boolean): v
           {microphoneHelp}
         </p>
       )}
-      <TranscriptionServer disabled={saving} onChanged={() => void refresh()} />
+      <TranscriptionServer disabled={busy} onChanged={() => void refresh()} />
       {data ? (
         <>
           <div ref={voiceRow} className="account-preference-row">
