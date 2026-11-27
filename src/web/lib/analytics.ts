@@ -153,6 +153,11 @@ const presentationKinds = [
   'chart',
   'apps',
   'diagram',
+  'items',
+  'schedule',
+  'facts',
+  'compare',
+  'draft',
 ];
 const artifactKinds = [
   'image',
